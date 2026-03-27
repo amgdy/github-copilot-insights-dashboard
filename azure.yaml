@@ -1,0 +1,12 @@
+name: ghcp-dashboard
+metadata:
+  template: ghcp-dashboard
+services:
+  web:
+    project: ./app
+    language: ts
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      remoteBuild: true

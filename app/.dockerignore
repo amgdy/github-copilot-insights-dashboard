@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env*
+.azure
+infra
+sql
+drizzle.config.ts
