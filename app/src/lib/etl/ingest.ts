@@ -40,7 +40,7 @@ import {
   computeRecordHash,
 } from "./transform";
 import { eq, sql, and, inArray } from "drizzle-orm";
-import { modelDisplayName, isPremiumModel } from "@/lib/utils/model-display-names";
+
 
 interface IngestOptions {
   enterpriseSlug: string;
@@ -99,18 +99,8 @@ async function ensureDimensions(records: CopilotUsageRecord[]) {
   for (const name of modelNames) {
     await db
       .insert(dimModel)
-      .values({
-        modelName: name,
-        displayName: modelDisplayName(name),
-        isPremium: isPremiumModel(name),
-      })
-      .onConflictDoUpdate({
-        target: dimModel.modelName,
-        set: {
-          displayName: sql`EXCLUDED.display_name`,
-          isPremium: sql`EXCLUDED.is_premium`,
-        },
-      });
+      .values({ modelName: name })
+      .onConflictDoNothing();
   }
   const models = await db.select().from(dimModel);
   const modelMap = new Map(models.map((m) => [m.modelName, m.modelId]));

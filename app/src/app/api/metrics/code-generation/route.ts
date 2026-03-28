@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { factCopilotUsageDaily, rawCopilotUsage, dimUser } from "@/lib/db/schema";
 import { sql, and, gte, lte, eq, inArray } from "drizzle-orm";
 import { daysAgo, isValidDate } from "@/lib/utils";
-import { modelDisplayName } from "@/lib/utils/model-display-names";
 import { z } from "zod";
 
 const querySchema = z.object({
@@ -193,7 +192,7 @@ export async function GET(request: NextRequest) {
     const modelAgentMap = new Map<string, { added: number; deleted: number }>();
 
     for (const r of byModelFeature) {
-      const model = modelDisplayName(String(r.model));
+      const model = String(r.model);
       const isAgent = AGENT_FEATURES.includes(String(r.feature));
 
       if (!isAgent) {

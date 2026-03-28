@@ -57,6 +57,13 @@
       "when": 1774674390389,
       "tag": "0007_young_kylun",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774706953412,
+      "tag": "0008_flippant_greymalkin",
+      "breakpoints": true
     }
   ]
 }

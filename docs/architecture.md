@@ -142,7 +142,6 @@ erDiagram
     dim_model {
         int model_key PK
         string model_name
-        string display_name
         boolean is_premium
     }
 

@@ -21,7 +21,6 @@ export async function GET(request: NextRequest) {
       .select({
         modelId: dimModel.modelId,
         modelName: dimModel.modelName,
-        displayName: dimModel.displayName,
         isPremium: dimModel.isPremium,
         isEnabled: dimModel.isEnabled,
         createdAt: dimModel.createdAt,
@@ -83,7 +82,6 @@ export async function GET(request: NextRequest) {
       const stats = statsMap.get(m.modelId);
       return {
         modelName: m.modelName,
-        displayName: m.displayName ?? m.modelName,
         isPremium: m.isPremium,
         isEnabled: m.isEnabled ?? true,
         tier: m.isPremium ? "premium" : "included",

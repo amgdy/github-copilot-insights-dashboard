@@ -13,7 +13,6 @@ import {
 } from "@/lib/db/schema";
 import { sql, and, gte, lte, eq, inArray } from "drizzle-orm";
 import { daysAgo, isValidDate } from "@/lib/utils";
-import { modelDisplayName } from "@/lib/utils/model-display-names";
 import { z } from "zod";
 
 const querySchema = z.object({
@@ -296,7 +295,7 @@ export async function GET(request: NextRequest) {
     const kpi = kpiResult[0];
 
     // Find most used chat model
-    const topModel = modelTotal.length > 0 ? modelDisplayName(modelTotal[0].name) : "N/A";
+    const topModel = modelTotal.length > 0 ? String(modelTotal[0].name) : "N/A";
 
     // ── Shape chat mode data into pivoted rows ──
     const CHAT_MODE_LABELS: Record<string, string> = {
@@ -315,16 +314,16 @@ export async function GET(request: NextRequest) {
     const chatModePivoted = pivotByDate(chatModeByDay, "feature", "value", formatFeature);
 
     // Pivot modelByDay
-    const modelByDayPivoted = pivotByDate(modelByDay, "model", "value", modelDisplayName);
+    const modelByDayPivoted = pivotByDate(modelByDay, "model", "value");
 
     // Pivot langByDay
     const langByDayPivoted = pivotByDate(langByDay, "language", "value");
 
     // Pivot model×feature: [{model, feature, value}] → [{model, Agent: n, ...}]
-    const modelByFeaturePivoted = pivotByKey(modelByFeature, "model", "feature", "value", formatFeature, modelDisplayName);
+    const modelByFeaturePivoted = pivotByKey(modelByFeature, "model", "feature", "value", formatFeature);
 
     // Pivot language×model: [{language, model, value}] → [{language, gpt-5.4: n, ...}]
-    const langModelPivoted = pivotByKey(langModelData, "language", "model", "value", modelDisplayName);
+    const langModelPivoted = pivotByKey(langModelData, "language", "model", "value");
 
     return NextResponse.json({
       period: { start: startDate, end: endDate },
@@ -347,7 +346,7 @@ export async function GET(request: NextRequest) {
       requestsPerChatMode: chatModePivoted,
       codeCompletions: completionsByDay,
       modelUsagePerDay: modelByDayPivoted,
-      chatModelUsage: modelTotal.map((m) => ({ name: modelDisplayName(m.name), value: m.value })),
+      chatModelUsage: modelTotal.map((m) => ({ name: m.name, value: m.value })),
       modelUsagePerChatMode: modelByFeaturePivoted,
       languageUsagePerDay: langByDayPivoted,
       languageUsage: langTotal,

@@ -23,7 +23,6 @@ export async function register() {
     // Fixup: ensure columns from migration 0002 exist (may have been
     // recorded as applied before the ALTER TABLE statements succeeded).
     try {
-      await sql`ALTER TABLE "dim_model" ADD COLUMN IF NOT EXISTS "display_name" varchar(255)`;
       await sql`ALTER TABLE "dim_model" ADD COLUMN IF NOT EXISTS "is_premium" boolean DEFAULT false NOT NULL`;
       await sql`ALTER TABLE "dim_model" ADD COLUMN IF NOT EXISTS "is_enabled" boolean`;
       await sql`ALTER TABLE "ingestion_log" ADD COLUMN IF NOT EXISTS "source" varchar(20) DEFAULT 'api' NOT NULL`;

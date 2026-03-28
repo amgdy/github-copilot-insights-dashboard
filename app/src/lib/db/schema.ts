@@ -87,7 +87,6 @@ export const dimLanguage = pgTable("dim_language", {
 export const dimModel = pgTable("dim_model", {
   modelId: serial("model_id").primaryKey(),
   modelName: varchar("model_name", { length: 255 }).notNull().unique(),
-  displayName: varchar("display_name", { length: 255 }),
   isPremium: boolean("is_premium").default(false).notNull(),
   isEnabled: boolean("is_enabled"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

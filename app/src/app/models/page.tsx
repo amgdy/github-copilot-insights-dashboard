@@ -31,7 +31,6 @@ interface ModelUsage {
 
 interface ModelInfo {
   modelName: string;
-  displayName: string;
   isPremium: boolean;
   isEnabled: boolean;
   tier: string;
@@ -111,8 +110,7 @@ export default function ModelsPage() {
       if (search) {
         const q = search.toLowerCase();
         return (
-          m.modelName.toLowerCase().includes(q) ||
-          m.displayName.toLowerCase().includes(q)
+          m.modelName.toLowerCase().includes(q)
         );
       }
       return true;
@@ -126,7 +124,7 @@ export default function ModelsPage() {
       .sort((a, b) => (b.usage?.totalRequests ?? 0) - (a.usage?.totalRequests ?? 0))
       .slice(0, 15);
     return {
-      labels: sorted.map((m) => m.displayName),
+      labels: sorted.map((m) => m.modelName),
       datasets: [{
         label: "Total Requests",
         data: sorted.map((m) => m.usage?.totalRequests ?? 0),
@@ -299,10 +297,7 @@ export default function ModelsPage() {
                 filteredModels.map((m) => (
                   <tr key={m.modelName} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="py-2.5 pr-4">
-                      <p className="font-medium text-gray-900">{m.displayName}</p>
-                      {m.displayName !== m.modelName && (
-                        <p className="text-[10px] text-gray-400">{m.modelName}</p>
-                      )}
+                      <p className="font-medium text-gray-900">{m.modelName}</p>
                     </td>
                     <td className="py-2.5 pr-4">
                       <span
