@@ -41,10 +41,6 @@ interface SettingsData {
     github_token: { configured: boolean };
     github_enterprise_slug: { configured: boolean };
   };
-  envFallback: {
-    github_token: boolean;
-    github_enterprise_slug: string | null;
-  };
 }
 
 interface SyncIntervalData {
@@ -256,12 +252,9 @@ export default function DataSyncPage() {
   };
 
   const isConfigured =
-    settings?.settings.github_token.configured ||
-    settings?.envFallback.github_token ||
-    false;
+    settings?.settings.github_token.configured || false;
   const hasSlug =
-    settings?.settings.github_enterprise_slug.configured ||
-    !!settings?.envFallback.github_enterprise_slug;
+    settings?.settings.github_enterprise_slug.configured || false;
 
   const effectiveMinutes = isCustomInterval
     ? customHours * 60 + customMinutesInput

@@ -29,11 +29,7 @@ export async function getGitHubConfig(): Promise<{
   token: string | null;
   enterpriseSlug: string | null;
 }> {
-  const token =
-    (await getSetting("github_token")) ?? process.env.GITHUB_TOKEN ?? null;
-  const slug =
-    (await getSetting("github_enterprise_slug")) ??
-    process.env.GITHUB_ENTERPRISE_SLUG ??
-    null;
+  const token = await getSetting("github_token");
+  const slug = await getSetting("github_enterprise_slug");
   return { token, enterpriseSlug: slug };
 }

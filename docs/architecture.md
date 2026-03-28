@@ -196,7 +196,7 @@ Deployed via Azure Developer CLI (`azd`) with Bicep templates.
 | **Container App Environment** | — | Managed environment with Log Analytics |
 | **PostgreSQL Flexible Server** | B1ms / 32 GB | Relational database |
 | **Container Registry** | Basic | Docker image registry |
-| **Key Vault** | RBAC | Stores DATABASE_URL, GITHUB_TOKEN, ADMIN_PASSWORD |
+| **Key Vault** | RBAC | Stores DATABASE_URL, ADMIN_PASSWORD |
 | **Application Insights** | — | APM and telemetry |
 | **Log Analytics Workspace** | — | Centralized logging |
 | **Managed Identity** | User-assigned | RBAC for ACR pull + Key Vault access |

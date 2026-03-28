@@ -568,21 +568,23 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
 
 // ── CLI Entry Point ──
 if (require.main === module) {
-  const slug = process.env.GITHUB_ENTERPRISE_SLUG;
-  const token = process.env.GITHUB_TOKEN;
+  (async () => {
+    const { getGitHubConfig } = await import("@/lib/db/settings");
+    const { token, enterpriseSlug: slug } = await getGitHubConfig();
 
-  if (!slug || !token) {
-    console.error("Set GITHUB_ENTERPRISE_SLUG and GITHUB_TOKEN environment variables for CLI mode.");
-    process.exit(1);
-  }
-
-  ingestCopilotUsage({ enterpriseSlug: slug, token })
-    .then((result) => {
-      console.info("Ingestion result:", result);
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error("Ingestion error:", err);
+    if (!slug || !token) {
+      console.error("Configure GitHub token and enterprise slug via the Settings UI before running CLI ingest.");
       process.exit(1);
-    });
+    }
+
+    ingestCopilotUsage({ enterpriseSlug: slug, token })
+      .then((result) => {
+        console.info("Ingestion result:", result);
+        process.exit(0);
+      })
+      .catch((err) => {
+        console.error("Ingestion error:", err);
+        process.exit(1);
+      });
+  })();
 }

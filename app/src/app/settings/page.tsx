@@ -22,10 +22,6 @@ interface SettingsData {
     github_token: SettingState;
     github_enterprise_slug: SettingState;
   };
-  envFallback: {
-    github_token: boolean;
-    github_enterprise_slug: string | null;
-  };
 }
 
 export default function ConfigurationPage() {
@@ -101,7 +97,7 @@ export default function ConfigurationPage() {
         body: JSON.stringify({ key }),
       });
       if (res.ok) {
-        showMessage("success", "Setting removed. Will fall back to environment variable if set.");
+        showMessage("success", "Setting removed.");
         if (key === "github_enterprise_slug") setSlugInput("");
         await fetchSettings();
       } else {
@@ -143,9 +139,7 @@ export default function ConfigurationPage() {
       <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
         <p className="font-medium">How settings are resolved</p>
         <p className="mt-1 text-xs text-blue-700">
-          Settings saved here take precedence over environment variables. If no value is saved in the
-          database, the app falls back to <code className="rounded bg-blue-100 px-1">GITHUB_TOKEN</code> and{" "}
-          <code className="rounded bg-blue-100 px-1">GITHUB_ENTERPRISE_SLUG</code> environment variables.
+          Configure your GitHub token and enterprise slug here. Settings are stored securely in the database.
         </p>
       </div>
 
@@ -178,12 +172,6 @@ export default function ConfigurationPage() {
         {data?.settings.github_token.configured && (
           <p className="mb-3 text-xs text-gray-500">
             Current: <code className="rounded bg-gray-100 px-1">{data.settings.github_token.masked}</code>
-          </p>
-        )}
-
-        {data?.envFallback.github_token && !data?.settings.github_token.configured && (
-          <p className="mb-3 text-xs text-amber-600">
-            Using environment variable fallback (GITHUB_TOKEN).
           </p>
         )}
 
@@ -241,12 +229,6 @@ export default function ConfigurationPage() {
           The slug of your GitHub Enterprise (e.g. &quot;my-enterprise&quot;). Found in your enterprise URL:
           github.com/enterprises/<strong>your-slug</strong>
         </p>
-
-        {data?.envFallback.github_enterprise_slug && !data?.settings.github_enterprise_slug.configured && (
-          <p className="mb-3 text-xs text-amber-600">
-            Using environment variable fallback: <code className="rounded bg-gray-100 px-1">{data.envFallback.github_enterprise_slug}</code>
-          </p>
-        )}
 
         <div className="flex gap-2">
           <input

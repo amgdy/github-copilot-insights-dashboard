@@ -80,7 +80,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 - **Node.js** 20+ and npm
 - **PostgreSQL** 16+ (local or cloud)
 - **GitHub Enterprise Cloud** with Copilot enabled
-- **GitHub Personal Access Token** with `manage_billing:copilot` and `read:org` scopes
+- **GitHub Personal Access Token** with `manage_billing:copilot`, `read:enterprise`, `read:org` scopes
 
 ## Quick Start
 
@@ -95,7 +95,7 @@ npm install
 
 # 3. Configure environment
 cp .env.example .env
-# Edit .env with your database URL and GitHub token
+# Edit .env with your database URL and admin password
 
 # 4. Run database migrations
 npx drizzle-kit migrate
@@ -111,10 +111,9 @@ Open [http://localhost:3000](http://localhost:3000) and navigate to **Settings**
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `GITHUB_TOKEN` | Yes | GitHub PAT with `manage_billing:copilot` and `read:org` |
-| `GITHUB_ORG` | Yes | GitHub organization slug |
 | `ADMIN_PASSWORD` | Yes | Password for Settings page access (min 8 chars) |
-| `SYNC_INTERVAL_MINUTES` | No | Auto-sync interval (default: 360) |
+
+The **GitHub token**, **Enterprise slug**, and **sync interval** are configured via the Settings UI and stored in the database.
 
 ## Deploy to Azure
 

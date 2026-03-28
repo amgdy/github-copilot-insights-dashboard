@@ -29,10 +29,6 @@ export async function GET() {
         github_token: token ? { configured: true, masked: maskToken(token) } : { configured: false },
         github_enterprise_slug: slug ? { configured: true, value: slug } : { configured: false },
       },
-      envFallback: {
-        github_token: !!process.env.GITHUB_TOKEN,
-        github_enterprise_slug: process.env.GITHUB_ENTERPRISE_SLUG || null,
-      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to read settings";
