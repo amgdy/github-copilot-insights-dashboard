@@ -74,6 +74,13 @@ export function Sidebar() {
           <Settings className="h-4 w-4" />
           Settings
         </Link>
+        <div className="mt-2 px-3 text-xs text-gray-400">
+          v{process.env.NEXT_PUBLIC_BUILD_ID ?? "dev"}
+          <span className="mx-1">·</span>
+          {process.env.NEXT_PUBLIC_BUILD_TIME
+            ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toISOString().split("T")[0]
+            : "local"}
+        </div>
       </div>
     </aside>
   );

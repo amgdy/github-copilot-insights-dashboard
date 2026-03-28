@@ -10,3 +10,18 @@ services:
       path: ./Dockerfile
       context: .
       remoteBuild: true
+      buildArgs:
+        - BUILD_ID=${BUILD_ID}
+        - BUILD_TIME=${BUILD_TIME}
+    hooks:
+      prepackage:
+        posix:
+          shell: sh
+          run: |
+            [ -z "$BUILD_ID" ] && azd env set BUILD_ID 1
+            azd env set BUILD_TIME "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        windows:
+          shell: pwsh
+          run: |
+            if (-not $env:BUILD_ID) { azd env set BUILD_ID 1 }
+            azd env set BUILD_TIME (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ' -AsUTC)

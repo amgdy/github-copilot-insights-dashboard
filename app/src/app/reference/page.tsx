@@ -563,7 +563,7 @@ export default function MetricsInfoPage() {
         <select
           value={pageFilter}
           onChange={(e) => setPageFilter(e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-xs focus:border-blue-500 focus:outline-hidden"
         >
           <option value="All">All pages</option>
           {PAGES.map((p) => (
@@ -575,7 +575,7 @@ export default function MetricsInfoPage() {
           placeholder="Search metrics..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-64 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+          className="w-64 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-xs placeholder:text-gray-400 focus:border-blue-500 focus:outline-hidden"
         />
         <span className="text-xs text-gray-400">{filtered.length} metrics</span>
       </div>
@@ -583,7 +583,7 @@ export default function MetricsInfoPage() {
       {/* Metrics List */}
       <div className="space-y-4">
         {filtered.map((m, i) => (
-          <div key={i} className="rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div key={i} className="rounded-lg border border-gray-200 bg-white shadow-xs">
             <div className="border-b border-gray-100 px-5 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold text-gray-900">{m.name}</h3>
@@ -602,7 +602,7 @@ export default function MetricsInfoPage() {
               </div>
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Calculation</p>
-                <p className="mt-0.5 font-mono text-xs text-gray-600 bg-gray-50 rounded px-2 py-1.5">
+                <p className="mt-0.5 font-mono text-xs text-gray-600 bg-gray-50 rounded-sm px-2 py-1.5">
                   {m.calculation}
                 </p>
               </div>
@@ -631,7 +631,7 @@ export default function MetricsInfoPage() {
         </p>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {DATA_MODEL.map((t) => (
-            <div key={t.table} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <div key={t.table} className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
               <h3 className="font-mono text-sm font-semibold text-gray-900">{t.table}</h3>
               <p className="mt-1 text-xs text-gray-500">{t.description}</p>
               <ul className="mt-2 space-y-0.5">
@@ -650,7 +650,7 @@ export default function MetricsInfoPage() {
       <div>
         <h2 className="text-lg font-bold text-gray-900">API Endpoints</h2>
         <p className="text-sm text-gray-500 mb-4">Internal REST APIs that power the dashboard</p>
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-xs">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wider text-gray-500">

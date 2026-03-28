@@ -154,11 +154,11 @@ export default function ConfigurationPage() {
           )}
         </div>
         <p className="mb-3 text-xs text-gray-500">
-          Classic token scopes: <code className="rounded bg-gray-100 px-1">manage_billing:copilot</code> (read),{" "}
-          <code className="rounded bg-gray-100 px-1">read:enterprise</code>,{" "}
-          <code className="rounded bg-gray-100 px-1">read:org</code>,{" "}
-          <code className="rounded bg-gray-100 px-1">read:user</code>.{" "}
-          Fine-grained: <code className="rounded bg-gray-100 px-1">Enterprise Copilot metrics</code> (read).{" "}
+          Classic token scopes: <code className="rounded-sm bg-gray-100 px-1">manage_billing:copilot</code> (read),{" "}
+          <code className="rounded-sm bg-gray-100 px-1">read:enterprise</code>,{" "}
+          <code className="rounded-sm bg-gray-100 px-1">read:org</code>,{" "}
+          <code className="rounded-sm bg-gray-100 px-1">read:user</code>.{" "}
+          Fine-grained: <code className="rounded-sm bg-gray-100 px-1">Enterprise Copilot metrics</code> (read).{" "}
           <a
             href="https://github.com/settings/tokens/new?scopes=manage_billing:copilot,read:enterprise,read:org,read:user&description=Copilot+Insights+Dashboard"
             target="_blank"
@@ -171,7 +171,7 @@ export default function ConfigurationPage() {
 
         {data?.settings.github_token.configured && (
           <p className="mb-3 text-xs text-gray-500">
-            Current: <code className="rounded bg-gray-100 px-1">{data.settings.github_token.masked}</code>
+            Current: <code className="rounded-sm bg-gray-100 px-1">{data.settings.github_token.masked}</code>
           </p>
         )}
 
@@ -182,7 +182,7 @@ export default function ConfigurationPage() {
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder={data?.settings.github_token.configured ? "Enter new token to update" : "ghp_xxxxxxxxxxxx"}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
               autoComplete="off"
             />
             <button
@@ -197,7 +197,7 @@ export default function ConfigurationPage() {
           <button
             onClick={() => handleSave("github_token", tokenInput)}
             disabled={!tokenInput.trim() || saving === "github_token"}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving === "github_token" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save
@@ -236,12 +236,12 @@ export default function ConfigurationPage() {
             value={slugInput}
             onChange={(e) => setSlugInput(e.target.value)}
             placeholder="my-enterprise"
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
           />
           <button
             onClick={() => handleSave("github_enterprise_slug", slugInput)}
             disabled={!slugInput.trim() || saving === "github_enterprise_slug"}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving === "github_enterprise_slug" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save

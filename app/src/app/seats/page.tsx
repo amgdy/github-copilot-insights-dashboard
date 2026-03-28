@@ -253,8 +253,8 @@ export default function BusinessValuePage() {
           <h2 className="text-lg font-semibold text-red-800">Unable to load billing data</h2>
           <p className="mt-2 text-sm text-red-600">{error}</p>
           <p className="mt-3 text-xs text-red-500">
-            Ensure your PAT has <code className="rounded bg-red-100 px-1">manage_billing:copilot</code> or{" "}
-            <code className="rounded bg-red-100 px-1">read:enterprise</code> scope.
+            Ensure your PAT has <code className="rounded-sm bg-red-100 px-1">manage_billing:copilot</code> or{" "}
+            <code className="rounded-sm bg-red-100 px-1">read:enterprise</code> scope.
           </p>
         </div>
       </div>
@@ -467,7 +467,7 @@ export default function BusinessValuePage() {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
       <div className="border-b border-gray-100 px-4 py-3">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
@@ -479,7 +479,7 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 function Kpi({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
       <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${color ?? "text-gray-900"}`}>
         {typeof value === "number" ? value.toLocaleString() : value}

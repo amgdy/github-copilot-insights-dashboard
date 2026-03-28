@@ -59,7 +59,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-xs">
         <div className="mb-4 flex items-center gap-2">
           <Lock className="h-5 w-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">Admin Access</h2>
@@ -74,7 +74,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Admin password"
             autoFocus
-            className="mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             autoComplete="off"
           />
           {error && (
@@ -86,7 +86,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
           <button
             type="submit"
             disabled={!password.trim() || verifying}
-            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {verifying ? (
               <Loader2 className="mx-auto h-4 w-4 animate-spin" />

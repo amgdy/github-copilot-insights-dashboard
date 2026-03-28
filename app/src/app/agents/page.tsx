@@ -368,7 +368,7 @@ export default function AgentsPage() {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
       <div className="border-b border-gray-100 px-4 py-3">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
@@ -380,7 +380,7 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 function Kpi({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
       <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
       <p className="mt-1 text-2xl font-bold text-gray-900">
         {typeof value === "number" ? value.toLocaleString() : value}

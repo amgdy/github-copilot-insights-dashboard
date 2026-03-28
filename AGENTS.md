@@ -23,7 +23,7 @@ azd up                   # Full provision + deploy (first time)
 ## Project structure
 
 ```
-app/                      # Next.js 15 application
+app/                      # Next.js 16 application
   src/
     app/                  # Pages (App Router) + API routes (/api/*)
     components/           # Reusable React components
@@ -47,11 +47,11 @@ docs/                     # Architecture documentation (Mermaid diagrams)
 
 ## Tech stack
 
-- Next.js 15 (App Router), React 19, TypeScript 5.7 (strict mode)
-- PostgreSQL 16 with Drizzle ORM 0.39 (star schema)
+- Next.js 16 (App Router), React 19, TypeScript 6 (strict mode)
+- PostgreSQL 16 with Drizzle ORM 0.45 (star schema)
 - Chart.js 4 via react-chartjs-2 for visualizations
-- Tailwind CSS 3 (no custom CSS files)
-- Zod for all input validation
+- Tailwind CSS 4 (no custom CSS files)
+- Zod 4 for all input validation
 - Azure Container Apps, Key Vault, ACR, Application Insights
 - GitHub Copilot Usage Metrics API v2026-03-10
 

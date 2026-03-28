@@ -122,7 +122,7 @@ export function DataTable<T extends Record<string, unknown>>({
       <div className="overflow-hidden rounded-lg border border-gray-200">
         <div className="space-y-3 p-4">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-8 animate-pulse rounded bg-gray-100" />
+            <div key={i} className="h-8 animate-pulse rounded-sm bg-gray-100" />
           ))}
         </div>
       </div>
@@ -141,7 +141,7 @@ export function DataTable<T extends Record<string, unknown>>({
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="w-72 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-72 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             aria-label="Search table"
           />
           <span className="text-sm text-gray-500">
@@ -203,7 +203,7 @@ export function DataTable<T extends Record<string, unknown>>({
                           placeholder="Filter…"
                           value={columnFilters[String(col.key)] ?? ""}
                           onChange={(e) => handleColumnFilter(String(col.key), e.target.value)}
-                          className="w-full rounded border border-gray-200 px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none"
+                          className="w-full rounded-sm border border-gray-200 px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-hidden"
                           aria-label={`Filter ${col.header}`}
                         />
                       ) : (
@@ -270,7 +270,7 @@ export function DataTable<T extends Record<string, unknown>>({
                 id="page-size"
                 value={currentPageSize}
                 onChange={(e) => { setCurrentPageSize(Number(e.target.value)); setPage(0); }}
-                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
+                className="rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-hidden"
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size}>{size}</option>
@@ -283,7 +283,7 @@ export function DataTable<T extends Record<string, unknown>>({
               <button
                 onClick={() => setPage(0)}
                 disabled={safePage === 0}
-                className="rounded px-2 py-1 hover:bg-gray-100 disabled:opacity-40"
+                className="rounded-sm px-2 py-1 hover:bg-gray-100 disabled:opacity-40"
                 aria-label="First page"
               >
                 First
@@ -291,7 +291,7 @@ export function DataTable<T extends Record<string, unknown>>({
               <button
                 onClick={() => setPage(safePage - 1)}
                 disabled={safePage === 0}
-                className="rounded p-1 hover:bg-gray-100 disabled:opacity-40"
+                className="rounded-sm p-1 hover:bg-gray-100 disabled:opacity-40"
                 aria-label="Previous page"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -302,7 +302,7 @@ export function DataTable<T extends Record<string, unknown>>({
               <button
                 onClick={() => setPage(safePage + 1)}
                 disabled={safePage >= totalPages - 1}
-                className="rounded p-1 hover:bg-gray-100 disabled:opacity-40"
+                className="rounded-sm p-1 hover:bg-gray-100 disabled:opacity-40"
                 aria-label="Next page"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -310,7 +310,7 @@ export function DataTable<T extends Record<string, unknown>>({
               <button
                 onClick={() => setPage(totalPages - 1)}
                 disabled={safePage >= totalPages - 1}
-                className="rounded px-2 py-1 hover:bg-gray-100 disabled:opacity-40"
+                className="rounded-sm px-2 py-1 hover:bg-gray-100 disabled:opacity-40"
                 aria-label="Last page"
               >
                 Last

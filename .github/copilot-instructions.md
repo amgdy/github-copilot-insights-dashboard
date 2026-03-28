@@ -3,7 +3,7 @@
 ## Overview
 
 Copilot Insights — enterprise analytics dashboard for GitHub Copilot usage data.
-Tech stack: Next.js 15 (App Router), React 19, TypeScript 5.7, PostgreSQL 16, Drizzle ORM, Chart.js 4, Tailwind CSS 3, Zod.
+Tech stack: Next.js 16 (App Router), React 19, TypeScript 6, PostgreSQL 16, Drizzle ORM, Chart.js 4, Tailwind CSS 4, Zod 4.
 Deployed on Azure Container Apps via `azd`. Infrastructure defined in Bicep (`infra/`).
 
 ## Architecture

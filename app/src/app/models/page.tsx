@@ -246,7 +246,7 @@ export default function ModelsPage() {
             <select
               value={enabledFilter}
               onChange={(e) => setEnabledFilter(e.target.value as typeof enabledFilter)}
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-hidden"
             >
               <option value="all">All Status</option>
               <option value="enabled">Enabled</option>
@@ -255,7 +255,7 @@ export default function ModelsPage() {
             <select
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value as typeof tierFilter)}
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-hidden"
             >
               <option value="all">All Tiers</option>
               <option value="premium">Premium</option>
@@ -266,7 +266,7 @@ export default function ModelsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search models…"
-              className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -345,7 +345,7 @@ export default function ModelsPage() {
                               .map(([feat, count]) => (
                                 <span
                                   key={feat}
-                                  className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600"
+                                  className="inline-flex rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600"
                                   title={`${feat}: ${count.toLocaleString()} requests`}
                                 >
                                   {feat}

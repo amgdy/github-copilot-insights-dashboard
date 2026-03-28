@@ -509,7 +509,7 @@ export default function DataSyncPage() {
       )}
 
       {/* About Data Sync */}
-      <div className="flex gap-3 rounded-lg border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+      <div className="flex gap-3 rounded-lg border border-blue-100 bg-linear-to-r from-blue-50 to-indigo-50 p-4">
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
         <div>
           <p className="text-sm font-medium text-blue-900">How data sync works</p>
@@ -571,7 +571,7 @@ export default function DataSyncPage() {
               <button
                 onClick={() => setShowConfirm(true)}
                 disabled={ingesting || !isConfigured || !hasSlug}
-                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {ingesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 {ingesting ? "Syncing…" : "Pull from API"}
@@ -598,7 +598,7 @@ export default function DataSyncPage() {
                 <button
                   onClick={handleToggleScheduler}
                   disabled={togglingScheduler}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     schedulerStatus?.enabled
                       ? "border border-red-300 bg-white text-red-600 hover:bg-red-50"
                       : "bg-green-600 text-white hover:bg-green-700"
@@ -622,7 +622,7 @@ export default function DataSyncPage() {
                   <button
                     type="button"
                     onClick={() => setShowDropdown(!showDropdown)}
-                    className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm hover:bg-gray-50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-xs hover:bg-gray-50 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                   >
                     <span className="text-gray-900">
                       {isCustomInterval ? `Custom (${formatInterval(effectiveMinutes)})` : currentDisplayLabel}
@@ -661,7 +661,7 @@ export default function DataSyncPage() {
                 <button
                   onClick={handleSaveInterval}
                   disabled={savingInterval || effectiveMinutes === syncData?.intervalMinutes}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {savingInterval ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                   Save
@@ -676,7 +676,7 @@ export default function DataSyncPage() {
                       max={24}
                       value={customHours}
                       onChange={(e) => setCustomHours(Math.max(0, Math.min(24, parseInt(e.target.value) || 0)))}
-                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                     />
                     <span className="text-xs text-gray-500">h</span>
                   </div>
@@ -687,7 +687,7 @@ export default function DataSyncPage() {
                       max={59}
                       value={customMinutesInput}
                       onChange={(e) => setCustomMinutesInput(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                     />
                     <span className="text-xs text-gray-500">m</span>
                   </div>
@@ -762,7 +762,7 @@ export default function DataSyncPage() {
         <button
           onClick={handleFileUpload}
           disabled={ingesting || !selectedFile}
-          className="mt-3 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {ingesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           {ingesting ? "Uploading…" : "Upload & Ingest"}
@@ -977,7 +977,7 @@ export default function DataSyncPage() {
                               <a
                                 href={`/api/settings/sync-history/${entry.id}/log`}
                                 download
-                                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50 transition-colors"
                               >
                                 <FileDown className="h-3.5 w-3.5" />
                                 Download Log
@@ -1032,7 +1032,7 @@ export default function DataSyncPage() {
         <button
           onClick={() => setShowResetConfirm(true)}
           disabled={resetting}
-          className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 shadow-xs hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseZap className="h-4 w-4" />}
           {resetting ? "Resetting…" : "Reset Database"}

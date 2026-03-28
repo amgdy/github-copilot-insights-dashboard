@@ -115,7 +115,7 @@ export function ReportFilters({ onApply, defaultDays = 28 }: ReportFiltersProps)
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 shadow-xs focus:border-blue-500 focus:outline-hidden"
         />
       </div>
       <div className="flex items-center gap-1.5">
@@ -124,7 +124,7 @@ export function ReportFilters({ onApply, defaultDays = 28 }: ReportFiltersProps)
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 shadow-xs focus:border-blue-500 focus:outline-hidden"
         />
       </div>
       {/* Searchable user dropdown */}
@@ -132,7 +132,7 @@ export function ReportFilters({ onApply, defaultDays = 28 }: ReportFiltersProps)
         <button
           type="button"
           onClick={() => setShowDropdown(!showDropdown)}
-          className="w-44 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-left text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none truncate"
+          className="w-44 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-left text-sm text-gray-700 shadow-xs focus:border-blue-500 focus:outline-hidden truncate"
         >
           {selectedUser ? selectedUser.displayLabel : "All users"}
         </button>
@@ -144,7 +144,7 @@ export function ReportFilters({ onApply, defaultDays = 28 }: ReportFiltersProps)
                 placeholder="Search users…"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
-                className="w-full rounded border border-gray-200 px-2.5 py-1.5 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                className="w-full rounded-sm border border-gray-200 px-2.5 py-1.5 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-hidden"
                 autoFocus
               />
             </div>
@@ -178,7 +178,7 @@ export function ReportFilters({ onApply, defaultDays = 28 }: ReportFiltersProps)
       </div>
       <button
         onClick={handleApply}
-        className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+        className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-xs hover:bg-blue-700"
       >
         Apply
       </button>
