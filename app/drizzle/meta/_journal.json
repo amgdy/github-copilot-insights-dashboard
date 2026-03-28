@@ -50,6 +50,13 @@
       "when": 1774672574645,
       "tag": "0006_misty_roland_deschain",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1774674390389,
+      "tag": "0007_young_kylun",
+      "breakpoints": true
     }
   ]
 }

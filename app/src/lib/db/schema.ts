@@ -250,6 +250,7 @@ export const ingestionLog = pgTable("ingestion_log", {
   recordsSkipped: integer("records_skipped").default(0),
   errorMessage: text("error_message"),
   apiRequests: integer("api_requests").default(0),
+  logMessages: text("log_messages"),
 });
 
 export const savedViews = pgTable("saved_views", {

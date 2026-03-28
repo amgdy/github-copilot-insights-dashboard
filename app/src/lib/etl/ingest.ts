@@ -406,7 +406,11 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
   recordsSkipped: number;
   apiRequests: number;
 }> {
-  const log = opts.onLog ?? (() => {});
+  const messages: string[] = [];
+  const log = (msg: string) => {
+    messages.push(`[${new Date().toISOString()}] ${msg}`);
+    opts.onLog?.(msg);
+  };
   const today = new Date().toISOString().split("T")[0];
 
   log(`Starting ingestion for enterprise "${opts.enterpriseSlug}"`);
@@ -437,7 +441,7 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
       console.info("No records fetched. Nothing to ingest.");
       await db
         .update(ingestionLog)
-        .set({ status: "success", completedAt: new Date(), recordsFetched: 0 })
+        .set({ status: "success", completedAt: new Date(), recordsFetched: 0, logMessages: messages.join("\n") })
         .where(eq(ingestionLog.id, logEntry.id));
       return { recordsFetched: 0, recordsInserted: 0, recordsSkipped: 0, apiRequests: apiRequestCount };
     }
@@ -445,6 +449,8 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
     log(`Fetched ${records.length} usage records`);
 
     const { inserted, skipped } = await loadRecords(records, logEntry.id, log);
+
+    log(`Ingestion complete — fetched: ${records.length}, inserted: ${inserted}, skipped: ${skipped}, API requests: ${apiRequestCount}`);
 
     await db
       .update(ingestionLog)
@@ -455,11 +461,11 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
         recordsInserted: inserted,
         recordsSkipped: skipped,
         apiRequests: apiRequestCount,
+        logMessages: messages.join("\n"),
       })
       .where(eq(ingestionLog.id, logEntry.id));
 
     console.info(`Ingestion complete: ${inserted} records processed, ${skipped} duplicates skipped.`);
-    log(`Ingestion complete — fetched: ${records.length}, inserted: ${inserted}, skipped: ${skipped}, API requests: ${apiRequestCount}`);
 
     return {
       recordsFetched: records.length,
@@ -478,6 +484,7 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
         status: "error",
         completedAt: new Date(),
         errorMessage: message,
+        logMessages: messages.join("\n"),
       })
       .where(eq(ingestionLog.id, logEntry.id));
 
@@ -493,7 +500,11 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
   recordsInserted: number;
   recordsSkipped: number;
 }> {
-  const log = opts.onLog ?? (() => {});
+  const messages: string[] = [];
+  const log = (msg: string) => {
+    messages.push(`[${new Date().toISOString()}] ${msg}`);
+    opts.onLog?.(msg);
+  };
   const today = new Date().toISOString().split("T")[0];
 
   log("Starting file upload ingestion");
@@ -516,7 +527,7 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
       log("No records found in file. Nothing to ingest.");
       await db
         .update(ingestionLog)
-        .set({ status: "success", completedAt: new Date(), recordsFetched: 0 })
+        .set({ status: "success", completedAt: new Date(), recordsFetched: 0, logMessages: messages.join("\n") })
         .where(eq(ingestionLog.id, logEntry.id));
       return { recordsFetched: 0, recordsInserted: 0, recordsSkipped: 0 };
     }
@@ -524,6 +535,8 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
     log(`Parsed ${records.length} usage records from file`);
 
     const { inserted, skipped } = await loadRecords(records, logEntry.id, log);
+
+    log(`Ingestion complete — records: ${records.length}, inserted: ${inserted}, skipped: ${skipped}`);
 
     await db
       .update(ingestionLog)
@@ -533,11 +546,11 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
         recordsFetched: records.length,
         recordsInserted: inserted,
         recordsSkipped: skipped,
+        logMessages: messages.join("\n"),
       })
       .where(eq(ingestionLog.id, logEntry.id));
 
     console.info(`File ingestion complete: ${inserted} records processed, ${skipped} duplicates skipped.`);
-    log(`Ingestion complete — records: ${records.length}, inserted: ${inserted}, skipped: ${skipped}`);
 
     return {
       recordsFetched: records.length,
@@ -555,6 +568,7 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
         status: "error",
         completedAt: new Date(),
         errorMessage: message,
+        logMessages: messages.join("\n"),
       })
       .where(eq(ingestionLog.id, logEntry.id));
 

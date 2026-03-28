@@ -980,6 +980,16 @@ export default function DataSyncPage() {
                                 </div>
                               )}
                             </dl>
+                            <div className="mt-3 flex justify-end">
+                              <a
+                                href={`/api/settings/sync-history/${entry.id}/log`}
+                                download
+                                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                              >
+                                <FileDown className="h-3.5 w-3.5" />
+                                Download Log
+                              </a>
+                            </div>
                           </div>
                         )}
                       </div>
