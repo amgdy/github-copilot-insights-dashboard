@@ -37,8 +37,9 @@ import {
   extractUniqueFeatures,
   extractUniqueLanguages,
   extractUniqueModels,
+  computeRecordHash,
 } from "./transform";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { modelDisplayName, isPremiumModel } from "@/lib/utils/model-display-names";
 
 interface IngestOptions {
@@ -147,15 +148,66 @@ async function ensureUsers(records: CopilotUsageRecord[]) {
 /**
  * Core loading logic shared by both API and file-upload ingest modes.
  * Stores raw JSON, upserts dimensions/users, and loads all fact tables.
+ * Uses content hashing to detect and skip duplicate records.
  */
 async function loadRecords(
   records: CopilotUsageRecord[],
   logEntryId: number,
   log: (msg: string) => void
-): Promise<number> {
-  // Store raw JSON
+): Promise<{ inserted: number; skipped: number }> {
+  // Compute content hashes for all incoming records
+  log("Computing content hashes for deduplication…");
+  const recordsWithHash = records.map((record) => ({
+    record,
+    hash: computeRecordHash(record),
+    key: `${record.day}|${record.enterprise_id}|${record.user_id}`,
+  }));
+
+  // Batch-fetch existing hashes from raw_copilot_usage for the incoming keys
+  const reportDates = [...new Set(records.map((r) => r.day))];
+  const existingRows = reportDates.length > 0
+    ? await db
+        .select({
+          reportDate: rawCopilotUsage.reportDate,
+          enterpriseId: rawCopilotUsage.enterpriseId,
+          userId: rawCopilotUsage.userId,
+          contentHash: rawCopilotUsage.contentHash,
+        })
+        .from(rawCopilotUsage)
+        .where(inArray(rawCopilotUsage.reportDate, reportDates))
+    : [];
+
+  const existingHashMap = new Map(
+    existingRows.map((r) => [`${r.reportDate}|${r.enterpriseId}|${r.userId}`, r.contentHash])
+  );
+
+  // Partition records into new, updated (hash changed), and duplicate (hash identical)
+  const newRecords: typeof recordsWithHash = [];
+  const updatedRecords: typeof recordsWithHash = [];
+  let skipped = 0;
+
+  for (const entry of recordsWithHash) {
+    const existingHash = existingHashMap.get(entry.key);
+    if (existingHash === undefined) {
+      newRecords.push(entry);
+    } else if (existingHash === entry.hash) {
+      skipped++;
+    } else {
+      updatedRecords.push(entry);
+    }
+  }
+
+  const toProcess = [...newRecords, ...updatedRecords];
+  log(`Dedup: ${newRecords.length} new, ${updatedRecords.length} updated, ${skipped} duplicate (skipped)`);
+
+  if (toProcess.length === 0) {
+    log("All records are duplicates — nothing to process");
+    return { inserted: 0, skipped };
+  }
+
+  // Store raw JSON with content hash
   log("Storing raw JSON records…");
-  for (const record of records) {
+  for (const { record, hash } of toProcess) {
     await db
       .insert(rawCopilotUsage)
       .values({
@@ -163,28 +215,37 @@ async function loadRecords(
         enterpriseId: parseInt(String(record.enterprise_id), 10) || 0,
         userId: record.user_id,
         rawJson: record,
+        contentHash: hash,
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [rawCopilotUsage.reportDate, rawCopilotUsage.enterpriseId, rawCopilotUsage.userId],
+        set: {
+          rawJson: sql`EXCLUDED.raw_json`,
+          contentHash: sql`EXCLUDED.content_hash`,
+          ingestedAt: sql`now()`,
+        },
+      });
   }
-  log(`Raw JSON stored for ${records.length} records`);
+  log(`Raw JSON stored for ${toProcess.length} records`);
 
   // Ensure dimensions exist
+  const allRecords = toProcess.map((e) => e.record);
   log("Upserting dimension tables (IDEs, features, languages, models)…");
   const { ideMap, featureMap, langMap, modelMap } =
-    await ensureDimensions(records);
+    await ensureDimensions(allRecords);
   log(`Dimensions loaded — IDEs: ${ideMap.size}, features: ${featureMap.size}, languages: ${langMap.size}, models: ${modelMap.size}`);
 
   // Ensure users exist
-  const uniqueUsers = new Set(records.map((r) => r.user_id)).size;
+  const uniqueUsers = new Set(allRecords.map((r) => r.user_id)).size;
   log(`Upserting ${uniqueUsers} users…`);
-  await ensureUsers(records);
+  await ensureUsers(allRecords);
   log("User dimension updated");
 
   // Load fact tables
   log("Loading fact tables…");
   let inserted = 0;
 
-  for (const record of records) {
+  for (const { record } of toProcess) {
     const factRow = transformToFactUsage(record);
 
     log(`Processing record: user=${record.user_login}, date=${record.day}`);
@@ -328,12 +389,12 @@ async function loadRecords(
     inserted++;
 
     if (inserted % 50 === 0) {
-      log(`Progress: ${inserted}/${records.length} records processed`);
+      log(`Progress: ${inserted}/${toProcess.length} records processed`);
     }
   }
 
-  log(`All fact tables loaded — ${inserted} records processed`);
-  return inserted;
+  log(`All fact tables loaded — ${inserted} records processed, ${skipped} duplicates skipped`);
+  return { inserted, skipped };
 }
 
 /**
@@ -342,6 +403,7 @@ async function loadRecords(
 export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
   recordsFetched: number;
   recordsInserted: number;
+  recordsSkipped: number;
   apiRequests: number;
 }> {
   const log = opts.onLog ?? (() => {});
@@ -377,12 +439,12 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
         .update(ingestionLog)
         .set({ status: "success", completedAt: new Date(), recordsFetched: 0 })
         .where(eq(ingestionLog.id, logEntry.id));
-      return { recordsFetched: 0, recordsInserted: 0, apiRequests: apiRequestCount };
+      return { recordsFetched: 0, recordsInserted: 0, recordsSkipped: 0, apiRequests: apiRequestCount };
     }
 
     log(`Fetched ${records.length} usage records`);
 
-    const inserted = await loadRecords(records, logEntry.id, log);
+    const { inserted, skipped } = await loadRecords(records, logEntry.id, log);
 
     await db
       .update(ingestionLog)
@@ -391,16 +453,18 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
         completedAt: new Date(),
         recordsFetched: records.length,
         recordsInserted: inserted,
+        recordsSkipped: skipped,
         apiRequests: apiRequestCount,
       })
       .where(eq(ingestionLog.id, logEntry.id));
 
-    console.info(`Ingestion complete: ${inserted} records processed.`);
-    log(`Ingestion complete — fetched: ${records.length}, inserted: ${inserted}, API requests: ${apiRequestCount}`);
+    console.info(`Ingestion complete: ${inserted} records processed, ${skipped} duplicates skipped.`);
+    log(`Ingestion complete — fetched: ${records.length}, inserted: ${inserted}, skipped: ${skipped}, API requests: ${apiRequestCount}`);
 
     return {
       recordsFetched: records.length,
       recordsInserted: inserted,
+      recordsSkipped: skipped,
       apiRequests: apiRequestCount,
     };
   } catch (err) {
@@ -427,6 +491,7 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
 export async function ingestFromFile(opts: FileIngestOptions): Promise<{
   recordsFetched: number;
   recordsInserted: number;
+  recordsSkipped: number;
 }> {
   const log = opts.onLog ?? (() => {});
   const today = new Date().toISOString().split("T")[0];
@@ -453,12 +518,12 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
         .update(ingestionLog)
         .set({ status: "success", completedAt: new Date(), recordsFetched: 0 })
         .where(eq(ingestionLog.id, logEntry.id));
-      return { recordsFetched: 0, recordsInserted: 0 };
+      return { recordsFetched: 0, recordsInserted: 0, recordsSkipped: 0 };
     }
 
     log(`Parsed ${records.length} usage records from file`);
 
-    const inserted = await loadRecords(records, logEntry.id, log);
+    const { inserted, skipped } = await loadRecords(records, logEntry.id, log);
 
     await db
       .update(ingestionLog)
@@ -467,15 +532,17 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
         completedAt: new Date(),
         recordsFetched: records.length,
         recordsInserted: inserted,
+        recordsSkipped: skipped,
       })
       .where(eq(ingestionLog.id, logEntry.id));
 
-    console.info(`File ingestion complete: ${inserted} records processed.`);
-    log(`Ingestion complete — records: ${records.length}, inserted: ${inserted}`);
+    console.info(`File ingestion complete: ${inserted} records processed, ${skipped} duplicates skipped.`);
+    log(`Ingestion complete — records: ${records.length}, inserted: ${inserted}, skipped: ${skipped}`);
 
     return {
       recordsFetched: records.length,
       recordsInserted: inserted,
+      recordsSkipped: skipped,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

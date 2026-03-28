@@ -29,6 +29,13 @@
       "when": 1774611134204,
       "tag": "0003_yielding_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1774662539195,
+      "tag": "0004_naive_captain_stacy",
+      "breakpoints": true
     }
   ]
 }

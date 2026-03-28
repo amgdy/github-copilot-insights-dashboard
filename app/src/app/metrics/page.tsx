@@ -203,7 +203,7 @@ export default function CopilotUsagePage() {
 
   const chatModeChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.requestsPerChatMode);
+    const keys = extractDimKeys(data.requestsPerChatMode).sort();
     return {
       labels: data.requestsPerChatMode.map((r) => fmtDate(String(r.date))),
       datasets: keys.map((k, i) => ({
@@ -263,7 +263,7 @@ export default function CopilotUsagePage() {
 
   const modelPerDayChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.modelUsagePerDay);
+    const keys = extractDimKeys(data.modelUsagePerDay).sort();
     return {
       labels: data.modelUsagePerDay.map((r) => fmtDate(String(r.date))),
       datasets: keys.map((k, i) => ({
@@ -290,7 +290,7 @@ export default function CopilotUsagePage() {
 
   const modelPerChatModeChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.modelUsagePerChatMode);
+    const keys = extractDimKeys(data.modelUsagePerChatMode).sort();
     return {
       labels: data.modelUsagePerChatMode.map((r) => String(r.name)),
       datasets: keys.map((k, i) => ({
@@ -303,7 +303,7 @@ export default function CopilotUsagePage() {
 
   const langPerDayChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.languageUsagePerDay);
+    const keys = extractDimKeys(data.languageUsagePerDay).sort();
     return {
       labels: data.languageUsagePerDay.map((r) => fmtDate(String(r.date))),
       datasets: keys.map((k, i) => ({
@@ -330,7 +330,7 @@ export default function CopilotUsagePage() {
 
   const modelPerLangChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.modelUsagePerLanguage);
+    const keys = extractDimKeys(data.modelUsagePerLanguage).sort();
     return {
       labels: data.modelUsagePerLanguage.map((r) => String(r.name)),
       datasets: keys.map((k, i) => ({

@@ -4,6 +4,7 @@
  * Updated for the latest Copilot Usage Metrics API (2026-03-10).
  */
 
+import { createHash } from "crypto";
 import type { CopilotUsageRecord } from "@/types/copilot-api";
 
 // ── Dimension Extraction ──
@@ -228,4 +229,34 @@ export function transformToFactLanguageModels(record: CopilotUsageRecord): FactL
     codeGenerationActivityCount: lm.code_generation_activity_count ?? 0,
     codeAcceptanceActivityCount: lm.code_acceptance_activity_count ?? 0,
   }));
+}
+
+// ── Record Hashing (Deduplication) ──
+
+/**
+ * Recursively sort object keys to produce a stable JSON string
+ * regardless of property insertion order across API calls.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return "[" + value.map((v) => stableStringify(v)).join(",") + "]";
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const sortedKeys = Object.keys(obj).sort();
+    const parts = sortedKeys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k]));
+    return "{" + parts.join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Compute a SHA-256 content hash for a Copilot usage record.
+ * Uses stable key-sorted JSON serialization so the hash is deterministic
+ * regardless of property order in the API response.
+ */
+export function computeRecordHash(record: CopilotUsageRecord): string {
+  const canonical = stableStringify(record);
+  return createHash("sha256").update(canonical).digest("hex");
 }

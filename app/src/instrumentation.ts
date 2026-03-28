@@ -27,41 +27,52 @@ export async function register() {
       await sql`ALTER TABLE "dim_model" ADD COLUMN IF NOT EXISTS "is_premium" boolean DEFAULT false NOT NULL`;
       await sql`ALTER TABLE "dim_model" ADD COLUMN IF NOT EXISTS "is_enabled" boolean`;
       await sql`ALTER TABLE "ingestion_log" ADD COLUMN IF NOT EXISTS "source" varchar(20) DEFAULT 'api' NOT NULL`;
-      console.info("Schema fixup: dim_model & ingestion_log columns verified");
+      await sql`ALTER TABLE "ingestion_log" ADD COLUMN IF NOT EXISTS "records_skipped" integer DEFAULT 0`;
+      await sql`ALTER TABLE "raw_copilot_usage" ADD COLUMN IF NOT EXISTS "content_hash" varchar(64)`;
+      console.info("Schema fixup: dim_model, ingestion_log & raw_copilot_usage columns verified");
     } catch (err) {
       console.error("Schema fixup failed:", err);
     } finally {
       await sql.end();
     }
 
-    // Schedule ETL ingestion using configurable interval (default 24h)
+    // Initialize ETL sync scheduler using saved settings
     const { getSetting } = await import("@/lib/db/settings");
-    let intervalHours = 24;
+    const { startScheduler } = await import("@/lib/etl/scheduler");
+
+    let syncEnabled = true; // default: enabled for backward compat
     try {
-      const saved = await getSetting("sync_interval_hours");
-      if (saved) intervalHours = Number(saved);
+      const savedEnabled = await getSetting("sync_enabled");
+      if (savedEnabled !== null) {
+        syncEnabled = savedEnabled === "true";
+      }
     } catch {
       // use default
     }
-    const intervalMs = intervalHours * 60 * 60 * 1000;
-    console.info(`Scheduling ETL ingestion every ${intervalHours}h`);
-    setInterval(async () => {
-      try {
-        const { getGitHubConfig } = await import("@/lib/db/settings");
-        const { ingestCopilotUsage } = await import("@/lib/etl/ingest");
-        const { token, enterpriseSlug } = await getGitHubConfig();
-        if (!token || !enterpriseSlug) {
-          console.warn("Scheduled ingest skipped — GitHub token or slug not configured");
-          return;
-        }
-        console.info("Scheduled ETL ingestion started");
-        const result = await ingestCopilotUsage({ token, enterpriseSlug, source: "scheduled" });
-        console.info(
-          `Scheduled ETL ingestion complete — fetched: ${result.recordsFetched}, inserted: ${result.recordsInserted}`
-        );
-      } catch (err) {
-        console.error("Scheduled ETL ingestion failed:", err);
+
+    let intervalMinutes = 1440; // default 24h
+    try {
+      const savedMinutes = await getSetting("sync_interval_minutes");
+      if (savedMinutes) {
+        intervalMinutes = Number(savedMinutes);
+      } else {
+        // Backward compatibility: migrate from sync_interval_hours
+        const savedHours = await getSetting("sync_interval_hours");
+        if (savedHours) intervalMinutes = Number(savedHours) * 60;
       }
-    }, intervalMs);
+    } catch {
+      // use default
+    }
+
+    if (syncEnabled) {
+      startScheduler(intervalMinutes);
+    } else {
+      const label = intervalMinutes < 60
+        ? `${intervalMinutes}m`
+        : intervalMinutes % 60 === 0
+          ? `${intervalMinutes / 60}h`
+          : `${Math.floor(intervalMinutes / 60)}h ${intervalMinutes % 60}m`;
+      console.info(`Sync scheduler is disabled (interval: ${label}). Enable it from the Data Sync settings page.`);
+    }
   }
 }

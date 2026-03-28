@@ -9,8 +9,6 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  DatabaseZap,
-  Clock,
 } from "lucide-react";
 
 interface SettingState {
@@ -30,15 +28,8 @@ interface SettingsData {
   };
 }
 
-interface SyncIntervalData {
-  intervalHours: number;
-  allowedIntervals: number[];
-  note: string;
-}
-
 export default function ConfigurationPage() {
   const [data, setData] = useState<SettingsData | null>(null);
-  const [syncData, setSyncData] = useState<SyncIntervalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -47,28 +38,16 @@ export default function ConfigurationPage() {
   const [tokenInput, setTokenInput] = useState("");
   const [slugInput, setSlugInput] = useState("");
   const [showToken, setShowToken] = useState(false);
-  const [selectedInterval, setSelectedInterval] = useState<number>(24);
-  const [savingInterval, setSavingInterval] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
-      const [settingsRes, intervalRes] = await Promise.all([
-        fetch("/api/settings"),
-        fetch("/api/settings/sync-interval"),
-      ]);
+      const settingsRes = await fetch("/api/settings");
       if (settingsRes.ok) {
         const result: SettingsData = await settingsRes.json();
         setData(result);
         if (result.settings.github_enterprise_slug.value) {
           setSlugInput(result.settings.github_enterprise_slug.value);
         }
-      }
-      if (intervalRes.ok) {
-        const result: SyncIntervalData = await intervalRes.json();
-        setSyncData(result);
-        setSelectedInterval(result.intervalHours);
       }
     } catch (err) {
       console.error("Failed to fetch settings:", err);
@@ -136,48 +115,6 @@ export default function ConfigurationPage() {
     }
   };
 
-  const handleSaveInterval = async () => {
-    setSavingInterval(true);
-    try {
-      const res = await fetch("/api/settings/sync-interval", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intervalHours: selectedInterval }),
-      });
-      if (res.ok) {
-        const result = await res.json();
-        showMessage("success", result.message ?? `Sync interval set to ${selectedInterval}h`);
-        await fetchSettings();
-      } else {
-        const err = await res.json();
-        showMessage("error", err.error ?? "Failed to save sync interval");
-      }
-    } catch {
-      showMessage("error", "Network error");
-    } finally {
-      setSavingInterval(false);
-    }
-  };
-
-  const handleReset = async () => {
-    setShowResetConfirm(false);
-    setResetting(true);
-    try {
-      const res = await fetch("/api/admin/reset", { method: "POST" });
-      if (res.ok) {
-        const result = await res.json();
-        showMessage("success", result.message ?? "Database reset successfully");
-      } else {
-        const err = await res.json();
-        showMessage("error", err.error ?? "Failed to reset database");
-      }
-    } catch {
-      showMessage("error", "Network error during reset");
-    } finally {
-      setResetting(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -201,6 +138,16 @@ export default function ConfigurationPage() {
           {message.text}
         </div>
       )}
+
+      {/* Info */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+        <p className="font-medium">How settings are resolved</p>
+        <p className="mt-1 text-xs text-blue-700">
+          Settings saved here take precedence over environment variables. If no value is saved in the
+          database, the app falls back to <code className="rounded bg-blue-100 px-1">GITHUB_TOKEN</code> and{" "}
+          <code className="rounded bg-blue-100 px-1">GITHUB_ENTERPRISE_SLUG</code> environment variables.
+        </p>
+      </div>
 
       {/* GitHub Token */}
       <div className="rounded-lg border border-gray-200 bg-white p-5">
@@ -330,100 +277,6 @@ export default function ConfigurationPage() {
         </div>
       </div>
 
-      {/* Sync Schedule */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <div className="mb-1 flex items-center gap-2">
-          <Clock className="h-4 w-4 text-gray-600" />
-          <h2 className="text-sm font-semibold text-gray-900">Automatic Sync Schedule</h2>
-        </div>
-        <p className="mb-3 text-xs text-gray-500">
-          {syncData?.note ?? "GitHub Copilot Metrics API data refreshes approximately once every 24 hours."}{" "}
-          Choose how often the dashboard pulls fresh data.
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-2">
-            {(syncData?.allowedIntervals ?? [1, 6, 12, 24]).map((h) => (
-              <button
-                key={h}
-                onClick={() => setSelectedInterval(h)}
-                className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
-                  selectedInterval === h
-                    ? "border-blue-600 bg-blue-50 text-blue-700"
-                    : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                {h === 1 ? "1 hour" : `${h} hours`}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={handleSaveInterval}
-            disabled={savingInterval || selectedInterval === syncData?.intervalHours}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {savingInterval ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save
-          </button>
-        </div>
-        {selectedInterval !== syncData?.intervalHours && (
-          <p className="mt-2 text-xs text-amber-600">
-            App restart required for interval changes to take effect.
-          </p>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-        <p className="font-medium">How settings are resolved</p>
-        <p className="mt-1 text-xs text-blue-700">
-          Settings saved here take precedence over environment variables. If no value is saved in the
-          database, the app falls back to <code className="rounded bg-blue-100 px-1">GITHUB_TOKEN</code> and{" "}
-          <code className="rounded bg-blue-100 px-1">GITHUB_ENTERPRISE_SLUG</code> environment variables.
-        </p>
-      </div>
-
-      {/* Database Management */}
-      <div className="rounded-lg border border-red-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-gray-900">Database Management</h2>
-        <p className="mt-1 mb-4 text-xs text-gray-500">
-          Reset the database to clear all ingested data. Configuration settings (token, slug) will be preserved.
-        </p>
-        <button
-          onClick={() => setShowResetConfirm(true)}
-          disabled={resetting}
-          className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseZap className="h-4 w-4" />}
-          {resetting ? "Resetting…" : "Reset Database"}
-        </button>
-      </div>
-
-      {/* Reset Confirmation Dialog */}
-      {showResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-red-600">Reset database?</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              This will permanently delete all ingested Copilot usage data. Your settings
-              (token, enterprise slug) will be preserved. This action cannot be undone.
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                onClick={() => setShowResetConfirm(false)}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReset}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-              >
-                Yes, Reset Database
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

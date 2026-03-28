@@ -195,7 +195,7 @@ export default function AgentsPage() {
 
   const agentModeChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.agentModeByDay);
+    const keys = extractDimKeys(data.agentModeByDay).sort();
     if (keys.length === 0) return null;
     return {
       labels: data.agentModeByDay.map((r) => fmtDate(String(r.date))),

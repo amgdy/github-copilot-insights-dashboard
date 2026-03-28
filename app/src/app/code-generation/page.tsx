@@ -142,18 +142,19 @@ export default function CodeGenerationPage() {
 
   const userByFeatureChart = useMemo(() => {
     if (!data || !data.userInitiatedByFeature.length) return null;
+    const sorted = [...data.userInitiatedByFeature].sort((a, b) => a.feature.localeCompare(b.feature));
     return {
-      labels: data.userInitiatedByFeature.map((d) => d.feature),
+      labels: sorted.map((d) => d.feature),
       datasets: [
         {
           label: "Suggested",
-          data: data.userInitiatedByFeature.map((d) => d.suggested),
+          data: sorted.map((d) => d.suggested),
           backgroundColor: COLOR.suggested,
           borderRadius: 3,
         },
         {
           label: "Added",
-          data: data.userInitiatedByFeature.map((d) => d.added),
+          data: sorted.map((d) => d.added),
           backgroundColor: COLOR.userAdded,
           borderRadius: 3,
         },
@@ -163,18 +164,19 @@ export default function CodeGenerationPage() {
 
   const agentByFeatureChart = useMemo(() => {
     if (!data || !data.agentInitiatedByFeature.length) return null;
+    const sorted = [...data.agentInitiatedByFeature].sort((a, b) => a.feature.localeCompare(b.feature));
     return {
-      labels: data.agentInitiatedByFeature.map((d) => d.feature),
+      labels: sorted.map((d) => d.feature),
       datasets: [
         {
           label: "Added",
-          data: data.agentInitiatedByFeature.map((d) => d.added),
+          data: sorted.map((d) => d.added),
           backgroundColor: COLOR.added,
           borderRadius: 3,
         },
         {
           label: "Deleted",
-          data: data.agentInitiatedByFeature.map((d) => d.deleted),
+          data: sorted.map((d) => d.deleted),
           backgroundColor: COLOR.deleted,
           borderRadius: 3,
         },
@@ -184,18 +186,19 @@ export default function CodeGenerationPage() {
 
   const userByModelChart = useMemo(() => {
     if (!data || !data.userInitiatedByModel.length) return null;
+    const sorted = [...data.userInitiatedByModel].sort((a, b) => a.model.localeCompare(b.model));
     return {
-      labels: data.userInitiatedByModel.map((d) => d.model),
+      labels: sorted.map((d) => d.model),
       datasets: [
         {
           label: "Suggested",
-          data: data.userInitiatedByModel.map((d) => d.suggested),
+          data: sorted.map((d) => d.suggested),
           backgroundColor: COLOR.suggested,
           borderRadius: 3,
         },
         {
           label: "Added",
-          data: data.userInitiatedByModel.map((d) => d.added),
+          data: sorted.map((d) => d.added),
           backgroundColor: COLOR.userAdded,
           borderRadius: 3,
         },
@@ -205,18 +208,19 @@ export default function CodeGenerationPage() {
 
   const agentByModelChart = useMemo(() => {
     if (!data || !data.agentInitiatedByModel.length) return null;
+    const sorted = [...data.agentInitiatedByModel].sort((a, b) => a.model.localeCompare(b.model));
     return {
-      labels: data.agentInitiatedByModel.map((d) => d.model),
+      labels: sorted.map((d) => d.model),
       datasets: [
         {
           label: "Added",
-          data: data.agentInitiatedByModel.map((d) => d.added),
+          data: sorted.map((d) => d.added),
           backgroundColor: COLOR.added,
           borderRadius: 3,
         },
         {
           label: "Deleted",
-          data: data.agentInitiatedByModel.map((d) => d.deleted),
+          data: sorted.map((d) => d.deleted),
           backgroundColor: COLOR.deleted,
           borderRadius: 3,
         },
@@ -226,18 +230,19 @@ export default function CodeGenerationPage() {
 
   const userByLangChart = useMemo(() => {
     if (!data || !data.userInitiatedByLanguage.length) return null;
+    const sorted = [...data.userInitiatedByLanguage].sort((a, b) => a.language.localeCompare(b.language));
     return {
-      labels: data.userInitiatedByLanguage.map((d) => d.language),
+      labels: sorted.map((d) => d.language),
       datasets: [
         {
           label: "Suggested",
-          data: data.userInitiatedByLanguage.map((d) => d.suggested),
+          data: sorted.map((d) => d.suggested),
           backgroundColor: COLOR.suggested,
           borderRadius: 3,
         },
         {
           label: "Added",
-          data: data.userInitiatedByLanguage.map((d) => d.added),
+          data: sorted.map((d) => d.added),
           backgroundColor: COLOR.userAdded,
           borderRadius: 3,
         },
@@ -247,18 +252,19 @@ export default function CodeGenerationPage() {
 
   const agentByLangChart = useMemo(() => {
     if (!data || !data.agentInitiatedByLanguage.length) return null;
+    const sorted = [...data.agentInitiatedByLanguage].sort((a, b) => a.language.localeCompare(b.language));
     return {
-      labels: data.agentInitiatedByLanguage.map((d) => d.language),
+      labels: sorted.map((d) => d.language),
       datasets: [
         {
           label: "Added",
-          data: data.agentInitiatedByLanguage.map((d) => d.added),
+          data: sorted.map((d) => d.added),
           backgroundColor: COLOR.added,
           borderRadius: 3,
         },
         {
           label: "Deleted",
-          data: data.agentInitiatedByLanguage.map((d) => d.deleted),
+          data: sorted.map((d) => d.deleted),
           backgroundColor: COLOR.deleted,
           borderRadius: 3,
         },

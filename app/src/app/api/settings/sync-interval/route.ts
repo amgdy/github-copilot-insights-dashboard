@@ -1,33 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSetting, setSetting } from "@/lib/db/settings";
+import { updateInterval } from "@/lib/etl/scheduler";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GitHub Copilot Usage Metrics API refreshes data once per day (~24h).
- * Recommended sync intervals:
- *   - 24h (once daily) — aligned with API refresh cycle
- *   - 12h (twice daily) — catch updates sooner
- *   - 6h (four times daily) — aggressive, for near-real-time needs
- *   - 1h — development/testing only
- */
-const ALLOWED_INTERVALS = [1, 6, 12, 24];
+const MIN_INTERVAL_MINUTES = 1;
+const MAX_INTERVAL_MINUTES = 1440; // 24 hours
+
+const PRESET_MINUTES = [1, 5, 15, 30, 60, 120, 360, 720, 1440];
 
 const putSchema = z.object({
-  intervalHours: z.number().refine((v) => ALLOWED_INTERVALS.includes(v), {
-    message: `Allowed sync intervals: ${ALLOWED_INTERVALS.join(", ")} hours`,
-  }),
+  intervalMinutes: z.coerce
+    .number()
+    .int()
+    .min(MIN_INTERVAL_MINUTES, { message: `Minimum sync interval is ${MIN_INTERVAL_MINUTES} minute` })
+    .max(MAX_INTERVAL_MINUTES, { message: `Maximum sync interval is ${MAX_INTERVAL_MINUTES} minutes (24 hours)` }),
 });
+
+function formatInterval(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 export async function GET() {
   try {
-    const saved = await getSetting("sync_interval_hours");
-    const intervalHours = saved ? Number(saved) : 24;
+    const savedMinutes = await getSetting("sync_interval_minutes");
+    let intervalMinutes: number;
+
+    if (savedMinutes) {
+      intervalMinutes = Number(savedMinutes);
+    } else {
+      // Backward compatibility: migrate from sync_interval_hours
+      const savedHours = await getSetting("sync_interval_hours");
+      intervalMinutes = savedHours ? Number(savedHours) * 60 : 1440;
+    }
 
     return NextResponse.json({
-      intervalHours,
-      allowedIntervals: ALLOWED_INTERVALS,
+      intervalMinutes,
+      presetMinutes: PRESET_MINUTES,
+      minInterval: MIN_INTERVAL_MINUTES,
+      maxInterval: MAX_INTERVAL_MINUTES,
       note: "GitHub Copilot Metrics API data refreshes approximately once every 24 hours.",
     });
   } catch (err) {
@@ -40,15 +55,17 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { intervalHours } = putSchema.parse(body);
+    const { intervalMinutes } = putSchema.parse(body);
 
-    await setSetting("sync_interval_hours", String(intervalHours));
-    console.info(`Sync interval updated to ${intervalHours}h. Restart required for interval to take effect.`);
+    await setSetting("sync_interval_minutes", String(intervalMinutes));
+    updateInterval(intervalMinutes);
+    const label = formatInterval(intervalMinutes);
+    console.info(`Sync interval updated to ${label}.`);
 
     return NextResponse.json({
       success: true,
-      intervalHours,
-      message: `Sync interval set to ${intervalHours}h. Restart the app for changes to take effect.`,
+      intervalMinutes,
+      message: `Sync interval set to ${label}.`,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

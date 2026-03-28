@@ -180,11 +180,12 @@ export default function PremiumRequestsPage() {
 
   const orgBar = useMemo(() => {
     if (!data || data.perOrgBreakdown.length === 0) return null;
+    const sorted = [...data.perOrgBreakdown].sort((a, b) => a.org.localeCompare(b.org));
     return {
-      labels: data.perOrgBreakdown.map((o) => o.org),
+      labels: sorted.map((o) => o.org),
       datasets: [{
         label: "Premium Requests",
-        data: data.perOrgBreakdown.map((o) => o.grossQuantity),
+        data: sorted.map((o) => o.grossQuantity),
         backgroundColor: "#6366f1",
         borderRadius: 6,
       }],

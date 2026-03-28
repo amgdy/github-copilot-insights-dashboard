@@ -104,6 +104,7 @@ export const rawCopilotUsage = pgTable(
     enterpriseId: integer("enterprise_id").notNull(),
     userId: integer("user_id").notNull(),
     rawJson: jsonb("raw_json").notNull(),
+    contentHash: varchar("content_hash", { length: 64 }),
   },
   (table) => [
     uniqueIndex("idx_raw_unique").on(table.reportDate, table.enterpriseId, table.userId),
@@ -246,6 +247,7 @@ export const ingestionLog = pgTable("ingestion_log", {
   status: varchar("status", { length: 20 }).default("running").notNull(),
   recordsFetched: integer("records_fetched").default(0),
   recordsInserted: integer("records_inserted").default(0),
+  recordsSkipped: integer("records_skipped").default(0),
   errorMessage: text("error_message"),
   apiRequests: integer("api_requests").default(0),
 });
