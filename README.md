@@ -21,6 +21,50 @@ Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing
 | **Models** | `/models` | AI model enablement status, usage volume, and feature breakdown |
 | **Metrics Reference** | `/reference` | Complete metric definitions, calculation formulas, and data sources |
 
+## Screenshots
+
+### Copilot Usage
+
+Daily and weekly active users, code completions, chat requests, and model usage trends.
+
+![Copilot Usage](docs/screenshots/copilot-usage.png)
+
+### Code Generation
+
+Lines of code added and deleted across modes, models, and languages.
+
+![Code Generation](docs/screenshots/code-generation.png)
+
+### CLI Impact
+
+GitHub Copilot CLI adoption, session and request volumes, and token consumption.
+
+![CLI Impact](docs/screenshots/cli-impact.png)
+
+### Copilot Licensing
+
+License utilization, seat costs, and savings opportunities — live from GitHub API.
+
+![Copilot Licensing](docs/screenshots/copilot-licensing.png)
+
+### Premium Requests
+
+Premium model request consumption, quota allocation, and per-user breakdown.
+
+![Premium Requests](docs/screenshots/premium-requests.png)
+
+### Settings — Configuration
+
+Manage your GitHub connection and enterprise slug.
+
+![Settings](docs/screenshots/settings.png)
+
+### Settings — Data Sync
+
+Schedule automatic syncs, trigger manual pulls, or upload NDJSON exports.
+
+![Data Sync](docs/screenshots/data-sync.png)
+
 ## Architecture
 
 - **Frontend**: Next.js 15 App Router, React 19, Tailwind CSS 3, Chart.js
