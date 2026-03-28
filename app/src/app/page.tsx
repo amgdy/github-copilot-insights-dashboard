@@ -9,6 +9,7 @@ import {
   Cpu,
   ArrowRight,
   Code,
+  Terminal,
 } from "lucide-react";
 
 const sections = [
@@ -35,6 +36,14 @@ const sections = [
     href: "/agents",
     icon: Bot,
     color: "text-purple-600 bg-purple-50",
+  },
+  {
+    title: "CLI Impact",
+    description:
+      "Track GitHub Copilot CLI adoption, session and request volumes, token consumption, and version distribution.",
+    href: "/cli",
+    icon: Terminal,
+    color: "text-teal-600 bg-teal-50",
   },
   {
     title: "Copilot Licensing",

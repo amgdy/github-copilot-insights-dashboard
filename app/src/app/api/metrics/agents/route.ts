@@ -252,8 +252,14 @@ export async function GET(request: NextRequest) {
       ? await resolveDisplayNames(agentLogins, token)
       : new Map<string, string>();
     const topAgentUsersWithNames = topAgentUsers.map((u) => ({
-      ...u,
+      userId: u.userId,
+      userLogin: u.userLogin,
       displayLabel: formatUserLabel(u.userLogin, displayNameMap),
+      daysActive: Number(u.daysActive),
+      totalInteractions: Number(u.totalInteractions),
+      codeGenerated: Number(u.codeGenerated),
+      codeAccepted: Number(u.codeAccepted),
+      locAdded: Number(u.locAdded),
     }));
 
     return NextResponse.json({

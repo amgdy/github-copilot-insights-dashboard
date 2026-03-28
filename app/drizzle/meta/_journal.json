@@ -36,6 +36,20 @@
       "when": 1774662539195,
       "tag": "0004_naive_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774670815458,
+      "tag": "0005_swift_marten_broadcloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774672574645,
+      "tag": "0006_misty_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

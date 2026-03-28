@@ -14,12 +14,14 @@ import {
   Settings,
   Cpu,
   Sparkles,
+  Terminal,
 } from "lucide-react";
 
 const navItems = [
   { label: "Copilot Usage", href: "/metrics", icon: BarChart3 },
   { label: "Code Generation", href: "/code-generation", icon: Code },
   { label: "Agent Impact", href: "/agents", icon: Bot },
+  { label: "CLI Impact", href: "/cli", icon: Terminal },
   { label: "Copilot Licensing", href: "/seats", icon: CreditCard },
   { label: "Premium Requests", href: "/premium-requests", icon: Sparkles },
   { label: "Users Data", href: "/users", icon: Users },
