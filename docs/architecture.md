@@ -18,7 +18,7 @@ graph TD
     API -- "Drizzle ORM" --> PG
     ETL -- "GitHub API v2026-03-10" --> GH
 
-    PG[("PostgreSQL 16<br/>Star Schema<br/>Azure Flexible Server")]
+    PG[("PostgreSQL 18<br/>Star Schema<br/>Azure Flexible Server")]
     GH["GitHub REST API<br/>api.github.com<br/>• Usage Metrics<br/>• Billing / Seats<br/>• Premium Requests"]
 ```
 
