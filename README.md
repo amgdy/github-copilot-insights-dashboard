@@ -1,10 +1,10 @@
 # Copilot Insights
 
-Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing, and AI model activity. Built with Next.js 15, React 19, TypeScript, and PostgreSQL.
+Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing, and AI model activity. Built with Next.js 16, React 19, TypeScript 6, and PostgreSQL.
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-blue)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -67,8 +67,8 @@ Schedule automatic syncs, trigger manual pulls, or upload NDJSON exports.
 
 ## Architecture
 
-- **Frontend**: Next.js 15 App Router, React 19, Tailwind CSS 3, Chart.js
-- **Backend**: Next.js API routes, Drizzle ORM 0.39
+- **Frontend**: Next.js 16.2 App Router, React 19.2, Tailwind CSS 4.2, Chart.js 4.5
+- **Backend**: Next.js API routes, Drizzle ORM 0.45
 - **Database**: PostgreSQL 16 (star schema — dimensions + fact tables)
 - **ETL**: Custom ingest pipeline with GitHub Copilot Usage Metrics API (v2026-03-10)
 - **Infrastructure**: Azure Container Apps, Azure Database for PostgreSQL, Azure Container Registry, Key Vault
@@ -77,7 +77,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## Prerequisites
 
-- **Node.js** 20+ and npm
+- **Node.js** 24+ and npm
 - **PostgreSQL** 16+ (local or cloud)
 - **GitHub Enterprise Cloud** with Copilot enabled
 - **GitHub Personal Access Token** with `manage_billing:copilot`, `read:enterprise`, `read:org` scopes

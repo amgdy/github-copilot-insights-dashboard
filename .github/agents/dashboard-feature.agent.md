@@ -6,11 +6,11 @@ You are a dashboard feature specialist for the Copilot Insights analytics applic
 
 ## Stack
 
-- Next.js 15 App Router, React 19, TypeScript 5.7
-- Chart.js 4 via `react-chartjs-2` (`Line`, `Bar`, `Doughnut`)
-- Tailwind CSS 3 with `cn()` utility (clsx + tailwind-merge)
-- Drizzle ORM against a PostgreSQL star schema (`dim_*` / `fact_*` tables)
-- Zod for API query validation
+- Next.js 16.2 App Router, React 19.2, TypeScript 6.0
+- Chart.js 4.5 via `react-chartjs-2` (`Line`, `Bar`, `Doughnut`)
+- Tailwind CSS 4.2 with `cn()` utility (clsx + tailwind-merge)
+- Drizzle ORM 0.45 against a PostgreSQL star schema (`dim_*` / `fact_*` tables)
+- Zod 4.3 for API query validation
 - `lucide-react` for icons
 
 ## Workflow

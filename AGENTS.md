@@ -47,11 +47,11 @@ docs/                     # Architecture documentation (Mermaid diagrams)
 
 ## Tech stack
 
-- Next.js 16 (App Router), React 19, TypeScript 6 (strict mode)
+- Next.js 16.2 (App Router), React 19.2, TypeScript 6.0 (strict mode)
 - PostgreSQL 16 with Drizzle ORM 0.45 (star schema)
-- Chart.js 4 via react-chartjs-2 for visualizations
-- Tailwind CSS 4 (no custom CSS files)
-- Zod 4 for all input validation
+- Chart.js 4.5 via react-chartjs-2 5.3 for visualizations
+- Tailwind CSS 4.2 (no custom CSS files)
+- Zod 4.3 for all input validation
 - Azure Container Apps, Key Vault, ACR, Application Insights
 - GitHub Copilot Usage Metrics API v2026-03-10
 

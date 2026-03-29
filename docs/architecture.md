@@ -7,7 +7,7 @@ Copilot Insights is an enterprise analytics dashboard for GitHub Copilot usage d
 ```mermaid
 graph TD
     subgraph ACA["Azure Container Apps"]
-        subgraph App["Next.js 15 Application"]
+        subgraph App["Next.js 16 Application"]
             React["React 19 Pages<br/>(App Router)"]
             API["API Routes<br/>/api/*"]
             ETL["ETL Pipeline<br/>(ingest + transform)"]
@@ -26,7 +26,7 @@ graph TD
 
 ### Frontend (React 19 + Next.js App Router)
 
-All dashboard pages are client components using `"use client"` that fetch data from internal API routes. Chart rendering uses `react-chartjs-2` (Chart.js 4).
+All dashboard pages are client components using `"use client"` that fetch data from internal API routes. Chart rendering uses `react-chartjs-2` (Chart.js 4.5).
 
 | Component | Purpose |
 |---|---|
