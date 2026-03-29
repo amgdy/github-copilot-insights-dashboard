@@ -116,7 +116,7 @@ resource kvSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 // ──────────────────────────────────────────────
 // 8. PostgreSQL Flexible Server
 // ──────────────────────────────────────────────
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
   name: 'azpg${resourceToken}'
   location: location
   sku: {
@@ -124,7 +124,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' =
     tier: 'Burstable'
   }
   properties: {
-    version: '16'
+    version: '18'
     administratorLogin: postgresAdminUser
     #disable-next-line use-secure-value-for-secure-inputs
     administratorLoginPassword: postgresAdminPassword

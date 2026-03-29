@@ -5,7 +5,7 @@ Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-blue)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Features
@@ -69,7 +69,7 @@ Schedule automatic syncs, trigger manual pulls, or upload NDJSON exports.
 
 - **Frontend**: Next.js 16.2 App Router, React 19.2, Tailwind CSS 4.2, Chart.js 4.5
 - **Backend**: Next.js API routes, Drizzle ORM 0.45
-- **Database**: PostgreSQL 16 (star schema — dimensions + fact tables)
+- **Database**: PostgreSQL 18 (star schema — dimensions + fact tables)
 - **ETL**: Custom ingest pipeline with GitHub Copilot Usage Metrics API (v2026-03-10)
 - **Infrastructure**: Azure Container Apps, Azure Database for PostgreSQL, Azure Container Registry, Key Vault
 
@@ -78,7 +78,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 ## Prerequisites
 
 - **Node.js** 24+ and npm
-- **PostgreSQL** 16+ (local or cloud)
+- **PostgreSQL** 18+ (local or cloud)
 - **GitHub Enterprise Cloud** with Copilot enabled
 - **GitHub Personal Access Token** with `manage_billing:copilot`, `read:enterprise`, `read:org` scopes
 
