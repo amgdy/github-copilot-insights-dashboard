@@ -10,6 +10,11 @@ param hasGitHubToken bool = false
 @secure()
 param adminPassword string
 
+@secure()
+param dashboardPassword string = ''
+
+param hasDashboardPassword bool = false
+
 var resourceToken = uniqueString(subscription().id, resourceGroup().id, location, environmentName)
 var postgresAdminPassword = '${uniqueString(subscription().id, resourceGroup().id, 'pg')}P@1${take(uniqueString(environmentName, 'salt'), 8)}'
 
@@ -194,6 +199,14 @@ resource kvSecretAdminPassword 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   }
 }
 
+resource kvSecretDashboardPassword 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (hasDashboardPassword) {
+  parent: keyVault
+  name: 'DASHBOARD-PASSWORD'
+  properties: {
+    value: dashboardPassword
+  }
+}
+
 // ──────────────────────────────────────────────
 // 12. Container App Environment
 // ──────────────────────────────────────────────
@@ -214,6 +227,58 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // ──────────────────────────────────────────────
 // 13. Container App (web)
 // ──────────────────────────────────────────────
+
+var baseSecrets = [
+  {
+    name: 'database-url'
+    keyVaultUrl: kvSecretDatabaseUrl.properties.secretUri
+    identity: managedIdentity.id
+  }
+  {
+    name: 'admin-password'
+    keyVaultUrl: kvSecretAdminPassword.properties.secretUri
+    identity: managedIdentity.id
+  }
+]
+
+var dashboardPasswordSecret = hasDashboardPassword
+  ? [
+      {
+        name: 'dashboard-password'
+        keyVaultUrl: kvSecretDashboardPassword!.properties.secretUri
+        identity: managedIdentity.id
+      }
+    ]
+  : []
+
+var baseEnvVars = [
+  {
+    name: 'DATABASE_URL'
+    secretRef: 'database-url'
+  }
+  {
+    name: 'NODE_ENV'
+    value: 'production'
+  }
+  {
+    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+    value: appInsights.properties.ConnectionString
+  }
+  {
+    name: 'ADMIN_PASSWORD'
+    secretRef: 'admin-password'
+  }
+]
+
+var dashboardPasswordEnvVar = hasDashboardPassword
+  ? [
+      {
+        name: 'DASHBOARD_PASSWORD'
+        secretRef: 'dashboard-password'
+      }
+    ]
+  : []
+
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'azca${resourceToken}'
   location: location
@@ -245,18 +310,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           identity: managedIdentity.id
         }
       ]
-      secrets: [
-        {
-          name: 'database-url'
-          keyVaultUrl: kvSecretDatabaseUrl.properties.secretUri
-          identity: managedIdentity.id
-        }
-        {
-          name: 'admin-password'
-          keyVaultUrl: kvSecretAdminPassword.properties.secretUri
-          identity: managedIdentity.id
-        }
-      ]
+      secrets: concat(baseSecrets, dashboardPasswordSecret)
     }
     template: {
       containers: [
@@ -267,24 +321,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
-            {
-              name: 'DATABASE_URL'
-              secretRef: 'database-url'
-            }
-            {
-              name: 'NODE_ENV'
-              value: 'production'
-            }
-            {
-              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-              value: appInsights.properties.ConnectionString
-            }
-            {
-              name: 'ADMIN_PASSWORD'
-              secretRef: 'admin-password'
-            }
-          ]
+          env: concat(baseEnvVars, dashboardPasswordEnvVar)
         }
       ]
       scale: {

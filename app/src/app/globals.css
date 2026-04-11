@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-growth: #22c55e;
   --color-growth-light: #dcfce7;
@@ -29,5 +31,30 @@
   ::backdrop,
   ::file-selector-button {
     border-color: var(--color-gray-200, currentcolor);
+  }
+
+  .dark *,
+  .dark ::after,
+  .dark ::before,
+  .dark ::backdrop,
+  .dark ::file-selector-button {
+    border-color: var(--color-gray-700, currentcolor);
+  }
+
+  /* Dark mode text selection */
+  .dark ::selection {
+    background-color: rgba(59, 130, 246, 0.5);
+    color: #f3f4f6;
+  }
+
+  /* PDF export: hide interactive elements via container class */
+  .pdf-capturing button:not([data-pdf-export-btn]),
+  .pdf-capturing select,
+  .pdf-capturing input {
+    display: none !important;
+  }
+  .pdf-capturing [data-pdf-hide],
+  .pdf-capturing .pdf-hide {
+    display: none !important;
   }
 }

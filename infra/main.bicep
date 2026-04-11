@@ -20,10 +20,14 @@ param postgresAdminUser string = 'pgadmin'
 param githubToken string = ''
 
 @secure()
-@minLength(8)
 @maxLength(128)
-@description('Copilot Insights Dashboard admin password. Used to protect access to the application Settings page. Must be at least 8 characters.')
-param adminPassword string
+@description('(Optional) Dashboard access password. When set, all pages require this password to access. Leave empty for unrestricted access. Must be at least 8 characters if provided.')
+param adminPassword string = ''
+
+@secure()
+@maxLength(128)
+@description('(Optional) Dashboard viewer password. When set, all dashboard pages require this password to view. Separate from the admin password used for Settings. Leave empty for unrestricted viewing.')
+param dashboardPassword string = ''
 
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
@@ -43,6 +47,8 @@ module resources 'resources.bicep' = {
     githubToken: githubToken
     hasGitHubToken: !empty(githubToken)
     adminPassword: adminPassword
+    dashboardPassword: dashboardPassword
+    hasDashboardPassword: !empty(dashboardPassword)
   }
 }
 

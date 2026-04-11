@@ -14,14 +14,30 @@ Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing
 |---|---|---|
 | **Copilot Usage** | `/metrics` | Daily/weekly active users, code completions, chat mode breakdown, model & language analytics |
 | **Code Generation** | `/code-generation` | LOC added/deleted by user vs agent, breakdowns by feature, model, and language |
-| **Agent Impact** | `/agents` | Agent adoption rate, acceptance rate, code generation comparison, top agent users |
+| **PR & Autofix** | `/pull-requests` | AI-assisted PR creation, Copilot code review suggestions, autofix analytics, and merge metrics |
+| **Agent Impact** | `/agents` | Agent adoption rate, IDE Agent vs GitHub Coding Agent breakdown, top agent users |
+| **CLI Impact** | `/cli` | CLI adoption, session/request volumes, token consumption, version distribution |
 | **Copilot Licensing** | `/seats` | Seat assignments, license utilization, plan distribution (live from GitHub API) |
 | **Premium Requests** | `/premium-requests` | Premium model request consumption and budget tracking (live from GitHub API) |
 | **Users** | `/users` | Individual user activity, engagement patterns, and feature adoption |
-| **Models** | `/models` | AI model enablement status, usage volume, and feature breakdown |
-| **Metrics Reference** | `/reference` | Complete metric definitions, calculation formulas, and data sources |
+| **Metrics Reference** | `/reference` | 200+ metric definitions, calculation formulas, and data sources |
+
+### Cross-cutting Features
+
+- **Internationalization** — 4 languages (English, Arabic RTL, Spanish, French) via `useTranslation()` hook
+- **Dark/Light/System theme** — three-mode theme with `dark:` Tailwind variants and theme-aware Chart.js options
+- **PDF export** — one-click PDF generation for all dashboard pages
+- **Configuration banner** — shown when GitHub token or enterprise slug is missing
+- **Audit logging** — tracks admin actions for compliance
+- **Dashboard auth gate** — optional password protection for all dashboard pages
 
 ## Screenshots
+
+### Landing Page
+
+Welcome page with feature overview cards and quick navigation to all dashboards.
+
+![Landing Page](docs/screenshots/landing.png)
 
 ### Copilot Usage
 
@@ -34,6 +50,18 @@ Daily and weekly active users, code completions, chat requests, and model usage 
 Lines of code added and deleted across modes, models, and languages.
 
 ![Code Generation](docs/screenshots/code-generation.png)
+
+### PR & Autofix
+
+AI-assisted pull request creation, Copilot code review suggestions, and autofix analytics.
+
+![PR & Autofix](docs/screenshots/pr-autofix.png)
+
+### Agent Impact
+
+Agent adoption rate, IDE Agent vs GitHub Coding Agent breakdown, and top agent users.
+
+![Agent Impact](docs/screenshots/agent-impact.png)
 
 ### CLI Impact
 
@@ -52,6 +80,18 @@ License utilization, seat costs, and savings opportunities — live from GitHub 
 Premium model request consumption, quota allocation, and per-user breakdown.
 
 ![Premium Requests](docs/screenshots/premium-requests.png)
+
+### Users
+
+Individual user activity explorer with license status, engagement metrics, and feature adoption.
+
+![Users](docs/screenshots/users.png)
+
+### Metrics Reference
+
+200+ metric definitions with calculation formulas, data sources, and usage guidance.
+
+![Metrics Reference](docs/screenshots/metrics-reference.png)
 
 ### Settings — Configuration
 
@@ -110,9 +150,14 @@ Open [http://localhost:3000](http://localhost:3000) and navigate to **Settings**
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `ADMIN_PASSWORD` | Yes | Password for Settings page access (min 8 chars) |
+| `DATABASE_URL` | Yes | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`) |
+| `ADMIN_PASSWORD` | No | Password for Settings page access. If unset, settings are open to all. Only leave this unset for local development on a trusted machine |
+| `DASHBOARD_PASSWORD` | No | Password gate for all dashboard pages. If unset, dashboards are open to all. Only leave this unset for local development or intentionally public dashboards |
+| `NEXT_PUBLIC_BUILD_ID` | No | Git commit SHA shown in sidebar footer (auto-set in Docker) |
+| `NEXT_PUBLIC_BUILD_TIME` | No | Build timestamp shown in sidebar footer (auto-set in Docker) |
 
+> [!WARNING]
+> For any non-local deployment, set `ADMIN_PASSWORD` to protect the **Settings** page. The Settings UI can configure the GitHub token, Enterprise slug, and sync interval. If dashboard pages should not be publicly accessible, also set `DASHBOARD_PASSWORD`. Leaving these unset is only recommended for local development on a trusted machine.
 The **GitHub token**, **Enterprise slug**, and **sync interval** are configured via the Settings UI and stored in the database.
 
 ## Deploy to Azure
@@ -147,15 +192,16 @@ ghcp-dashboard/
 │   │   │   ├── api/              # REST API endpoints
 │   │   │   ├── metrics/          # Copilot Usage dashboard
 │   │   │   ├── code-generation/  # Code generation report
+│   │   │   ├── pull-requests/    # PR & Autofix report
 │   │   │   ├── agents/           # Agent impact report
+│   │   │   ├── cli/              # CLI impact report
 │   │   │   ├── seats/            # Licensing page
 │   │   │   ├── premium-requests/ # Premium requests page
 │   │   │   ├── users/            # User explorer
-│   │   │   ├── models/           # Models & policies
 │   │   │   ├── reference/        # Metrics reference
-│   │   │   └── settings/         # Configuration & data sync
+│   │   │   └── settings/         # Configuration, data sync & audit log
 │   │   ├── components/           # Shared React components
-│   │   ├── lib/                  # Database, ETL, utilities
+│   │   ├── lib/                  # Database, ETL, i18n, theme, utilities
 │   │   └── types/                # TypeScript type definitions
 │   ├── drizzle/                  # Database migrations
 │   ├── public/                   # Static assets

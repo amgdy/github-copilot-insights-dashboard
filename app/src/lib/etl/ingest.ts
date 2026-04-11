@@ -16,15 +16,18 @@ import {
   factUserModelDaily,
   factCliDaily,
   factUserLanguageModelDaily,
+  factOrgAggregateDaily,
   dimIde,
   dimFeature,
   dimLanguage,
   dimModel,
   dimUser,
+  dimOrg,
   ingestionLog,
 } from "@/lib/db/schema";
-import { fetchCopilotUsage } from "@/lib/github/copilot-api";
-import type { CopilotUsageRecord } from "@/types/copilot-api";
+import { fetchCopilotUsage, fetchMultiOrgCopilotUsage } from "@/lib/github/copilot-api";
+import type { CopilotUsageRecord, CopilotAggregateRecord, EnterpriseOrg } from "@/types/copilot-api";
+import type { SyncScope } from "@/lib/db/settings";
 import {
   transformToFactUsage,
   transformToFactFeatures,
@@ -33,10 +36,12 @@ import {
   transformToFactModels,
   transformToFactCli,
   transformToFactLanguageModels,
+  transformToFactOrgAggregate,
   extractUniqueIdes,
   extractUniqueFeatures,
   extractUniqueLanguages,
   extractUniqueModels,
+  extractUniqueOrgIds,
   computeRecordHash,
 } from "./transform";
 import { eq, sql, and, inArray } from "drizzle-orm";
@@ -50,6 +55,10 @@ interface IngestOptions {
   onLog?: (message: string) => void;
   /** Source of the ingestion: "api" (manual), "scheduled", "file_upload" */
   source?: string;
+  /** Sync scopes to run. Multiple scopes are combined (e.g., enterprise + org). */
+  scopes?: SyncScope[];
+  /** When scopes includes "organization", the specific org logins to sync. */
+  orgLogins?: string[];
 }
 
 interface FileIngestOptions {
@@ -60,7 +69,52 @@ interface FileIngestOptions {
 /**
  * Upsert dimension values and return a lookup map of name → id.
  */
-async function ensureDimensions(records: CopilotUsageRecord[]) {
+async function ensureDimensions(
+  records: CopilotUsageRecord[],
+  discoveredOrgs?: EnterpriseOrg[]
+) {
+  // Organizations — from discovered orgs + any org IDs in records
+  if (discoveredOrgs?.length) {
+    for (const org of discoveredOrgs) {
+      await db
+        .insert(dimOrg)
+        .values({
+          orgName: org.login,
+          githubOrgId: org.id,
+        })
+        .onConflictDoUpdate({
+          target: dimOrg.orgName,
+          set: { githubOrgId: org.id, updatedAt: new Date() },
+        });
+    }
+  }
+
+  // Also handle org IDs from records (e.g. from file uploads)
+  const orgGithubIds = extractUniqueOrgIds(records);
+  for (const ghOrgId of orgGithubIds) {
+    await db
+      .insert(dimOrg)
+      .values({ orgName: String(ghOrgId) })
+      .onConflictDoNothing({ target: dimOrg.orgName });
+  }
+
+  // Handle _orgLogin from per-org fetches
+  const orgLogins = new Set<string>();
+  for (const r of records) {
+    if (r._orgLogin) orgLogins.add(r._orgLogin);
+  }
+  for (const login of orgLogins) {
+    await db
+      .insert(dimOrg)
+      .values({ orgName: login })
+      .onConflictDoNothing({ target: dimOrg.orgName });
+  }
+
+  const orgs = await db.select().from(dimOrg);
+  const orgMap = new Map(orgs.map((o) => [o.orgName, o.orgId]));
+  // Also map githubOrgId → orgId
+  const orgIdToKeyMap = new Map(orgs.filter(o => o.githubOrgId).map((o) => [String(o.githubOrgId), o.orgId]));
+
   // IDEs
   const ideNames = extractUniqueIdes(records);
   for (const name of ideNames) {
@@ -105,17 +159,32 @@ async function ensureDimensions(records: CopilotUsageRecord[]) {
   const models = await db.select().from(dimModel);
   const modelMap = new Map(models.map((m) => [m.modelName, m.modelId]));
 
-  return { ideMap, featureMap, langMap, modelMap };
+  return { ideMap, featureMap, langMap, modelMap, orgMap, orgIdToKeyMap };
 }
 
 /**
  * Ensure user dimension entries exist.
  */
-async function ensureUsers(records: CopilotUsageRecord[]) {
+async function ensureUsers(
+  records: CopilotUsageRecord[],
+  orgMap: Map<string, number>,
+  orgIdToKeyMap: Map<string, number>
+) {
   const seen = new Set<number>();
   for (const r of records) {
     if (seen.has(r.user_id)) continue;
     seen.add(r.user_id);
+
+    // Resolve org: prefer _orgLogin (per-org fetch), then organization_id (from record)
+    let resolvedOrgId: number | null = null;
+    if (r._orgLogin) {
+      resolvedOrgId = orgMap.get(r._orgLogin) ?? null;
+    }
+    if (!resolvedOrgId && r.organization_id) {
+      resolvedOrgId = orgMap.get(String(r.organization_id))
+        ?? orgIdToKeyMap.get(String(r.organization_id))
+        ?? null;
+    }
 
     // Check if user already exists as current
     const existing = await db
@@ -128,9 +197,15 @@ async function ensureUsers(records: CopilotUsageRecord[]) {
       await db.insert(dimUser).values({
         userId: r.user_id,
         userLogin: r.user_login,
-        orgId: null,
+        orgId: resolvedOrgId,
         isCurrent: true,
       });
+    } else if (resolvedOrgId && !existing[0].orgId) {
+      // Backfill orgId for existing users that don't have one
+      await db
+        .update(dimUser)
+        .set({ orgId: resolvedOrgId })
+        .where(eq(dimUser.userId, r.user_id));
     }
   }
 }
@@ -143,8 +218,10 @@ async function ensureUsers(records: CopilotUsageRecord[]) {
 async function loadRecords(
   records: CopilotUsageRecord[],
   logEntryId: number,
-  log: (msg: string) => void
-): Promise<{ inserted: number; skipped: number }> {
+  log: (msg: string) => void,
+  discoveredOrgs?: EnterpriseOrg[],
+  aggregateRecords?: CopilotAggregateRecord[]
+): Promise<{ inserted: number; skipped: number; aggregateInserted: number }> {
   // Compute content hashes for all incoming records
   log("Computing content hashes for deduplication…");
   const recordsWithHash = records.map((record) => ({
@@ -190,9 +267,23 @@ async function loadRecords(
   const toProcess = [...newRecords, ...updatedRecords];
   log(`Dedup: ${newRecords.length} new, ${updatedRecords.length} updated, ${skipped} duplicate (skipped)`);
 
+  // Always ensure dimensions exist using ALL input records (not just dedup-filtered).
+  // This is critical: if data was first ingested before org/dimension support was added,
+  // a re-import with all duplicates would otherwise skip dimension extraction entirely.
+  log("Upserting dimension tables (IDEs, features, languages, models, orgs)…");
+  const { ideMap, featureMap, langMap, modelMap, orgMap, orgIdToKeyMap } =
+    await ensureDimensions(records, discoveredOrgs);
+  log(`Dimensions loaded — IDEs: ${ideMap.size}, features: ${featureMap.size}, languages: ${langMap.size}, models: ${modelMap.size}, orgs: ${orgMap.size}`);
+
+  // Always ensure users exist from ALL input records
+  const uniqueUserCount = new Set(records.map((r) => r.user_id)).size;
+  log(`Upserting ${uniqueUserCount} users…`);
+  await ensureUsers(records, orgMap, orgIdToKeyMap);
+  log("User dimension updated");
+
   if (toProcess.length === 0) {
     log("All records are duplicates — nothing to process");
-    return { inserted: 0, skipped };
+    return { inserted: 0, skipped, aggregateInserted: 0 };
   }
 
   // Store raw JSON with content hash
@@ -218,25 +309,22 @@ async function loadRecords(
   }
   log(`Raw JSON stored for ${toProcess.length} records`);
 
-  // Ensure dimensions exist
-  const allRecords = toProcess.map((e) => e.record);
-  log("Upserting dimension tables (IDEs, features, languages, models)…");
-  const { ideMap, featureMap, langMap, modelMap } =
-    await ensureDimensions(allRecords);
-  log(`Dimensions loaded — IDEs: ${ideMap.size}, features: ${featureMap.size}, languages: ${langMap.size}, models: ${modelMap.size}`);
-
-  // Ensure users exist
-  const uniqueUsers = new Set(allRecords.map((r) => r.user_id)).size;
-  log(`Upserting ${uniqueUsers} users…`);
-  await ensureUsers(allRecords);
-  log("User dimension updated");
-
   // Load fact tables
   log("Loading fact tables…");
   let inserted = 0;
 
   for (const { record } of toProcess) {
     const factRow = transformToFactUsage(record);
+    // Resolve org: prefer _orgLogin (per-org fetch), then organizationId from record
+    let resolvedOrgId: number | null = null;
+    if (record._orgLogin) {
+      resolvedOrgId = orgMap.get(record._orgLogin) ?? null;
+    }
+    if (!resolvedOrgId && factRow.organizationId) {
+      resolvedOrgId = orgMap.get(String(factRow.organizationId))
+        ?? orgIdToKeyMap.get(String(factRow.organizationId))
+        ?? null;
+    }
 
     log(`Processing record: user=${record.user_login}, date=${record.day}`);
 
@@ -248,11 +336,12 @@ async function loadRecords(
         enterpriseId: factRow.enterpriseId,
         userId: factRow.userId,
         userLogin: factRow.userLogin,
-        orgId: null,
+        orgId: resolvedOrgId,
         userInitiatedInteractionCount: factRow.userInitiatedInteractionCount,
         codeGenerationActivityCount: factRow.codeGenerationActivityCount,
         codeAcceptanceActivityCount: factRow.codeAcceptanceActivityCount,
         usedAgent: factRow.usedAgent,
+        usedCopilotCodingAgent: factRow.usedCopilotCodingAgent,
         usedChat: factRow.usedChat,
         usedCli: factRow.usedCli,
         locSuggestedToAddSum: factRow.locSuggestedToAddSum,
@@ -383,18 +472,77 @@ async function loadRecords(
     }
   }
 
-  log(`All fact tables loaded — ${inserted} records processed, ${skipped} duplicates skipped`);
-  return { inserted, skipped };
+  // Load aggregate records (PR metrics, active user counts)
+  let aggregateInserted = 0;
+  if (aggregateRecords?.length) {
+    log(`Loading ${aggregateRecords.length} aggregate records (PR metrics)…`);
+    for (const aggRecord of aggregateRecords) {
+      const row = transformToFactOrgAggregate(aggRecord);
+      const resolvedOrgId = row.orgLogin ? orgMap.get(row.orgLogin) ?? null : null;
+
+      await db
+        .insert(factOrgAggregateDaily)
+        .values({
+          day: row.day,
+          orgId: resolvedOrgId,
+          scope: row.scope,
+          dailyActiveUsers: row.dailyActiveUsers,
+          weeklyActiveUsers: row.weeklyActiveUsers,
+          monthlyActiveUsers: row.monthlyActiveUsers,
+          monthlyActiveAgentUsers: row.monthlyActiveAgentUsers,
+          monthlyActiveChatUsers: row.monthlyActiveChatUsers,
+          dailyActiveCliUsers: row.dailyActiveCliUsers,
+          prTotalCreated: row.prTotalCreated,
+          prTotalReviewed: row.prTotalReviewed,
+          prTotalMerged: row.prTotalMerged,
+          prMedianMinutesToMerge: row.prMedianMinutesToMerge,
+          prTotalSuggestions: row.prTotalSuggestions,
+          prTotalAppliedSuggestions: row.prTotalAppliedSuggestions,
+          prTotalCreatedByCopilot: row.prTotalCreatedByCopilot,
+          prTotalReviewedByCopilot: row.prTotalReviewedByCopilot,
+          prTotalMergedCreatedByCopilot: row.prTotalMergedCreatedByCopilot,
+          prTotalMergedReviewedByCopilot: row.prTotalMergedReviewedByCopilot,
+          prMedianMinutesToMergeCopilotAuthored: row.prMedianMinutesToMergeCopilotAuthored,
+          prMedianMinutesToMergeCopilotReviewed: row.prMedianMinutesToMergeCopilotReviewed,
+          prTotalCopilotSuggestions: row.prTotalCopilotSuggestions,
+          prTotalCopilotAppliedSuggestions: row.prTotalCopilotAppliedSuggestions,
+        })
+        .onConflictDoUpdate({
+          target: [factOrgAggregateDaily.day, factOrgAggregateDaily.orgId, factOrgAggregateDaily.scope],
+          set: {
+            dailyActiveUsers: sql`EXCLUDED.daily_active_users`,
+            weeklyActiveUsers: sql`EXCLUDED.weekly_active_users`,
+            monthlyActiveUsers: sql`EXCLUDED.monthly_active_users`,
+            prTotalCreated: sql`EXCLUDED.pr_total_created`,
+            prTotalReviewed: sql`EXCLUDED.pr_total_reviewed`,
+            prTotalMerged: sql`EXCLUDED.pr_total_merged`,
+            prMedianMinutesToMerge: sql`EXCLUDED.pr_median_minutes_to_merge`,
+            prTotalCreatedByCopilot: sql`EXCLUDED.pr_total_created_by_copilot`,
+            prTotalReviewedByCopilot: sql`EXCLUDED.pr_total_reviewed_by_copilot`,
+            prTotalMergedCreatedByCopilot: sql`EXCLUDED.pr_total_merged_created_by_copilot`,
+          },
+        });
+
+      aggregateInserted++;
+    }
+    log(`Aggregate records loaded: ${aggregateInserted}`);
+  }
+
+  log(`All fact tables loaded — ${inserted} records processed, ${skipped} duplicates skipped, ${aggregateInserted} aggregates`);
+  return { inserted, skipped, aggregateInserted };
 }
 
 /**
- * Ingest from GitHub API. Fetches, transforms, and loads Copilot usage data.
+ * Ingest from GitHub API. Fetches per-org data, transforms, and loads Copilot usage data.
+ * Uses multi-org strategy: discovers all orgs, fetches user + aggregate data per org.
  */
 export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
   recordsFetched: number;
   recordsInserted: number;
   recordsSkipped: number;
+  aggregateRecords: number;
   apiRequests: number;
+  orgsDiscovered: number;
 }> {
   const messages: string[] = [];
   const log = (msg: string) => {
@@ -402,45 +550,163 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
     opts.onLog?.(msg);
   };
   const today = new Date().toISOString().split("T")[0];
+  const scopes = opts.scopes ?? ["enterprise"];
 
-  log(`Starting ingestion for enterprise "${opts.enterpriseSlug}"`);
+  const SCOPE_LABELS: Record<SyncScope, string> = {
+    enterprise: "Enterprise (enterprise-level metrics endpoint)",
+    all_orgs: "All Organizations (discover & fetch per-org)",
+    organization: `Specific Organizations (${opts.orgLogins?.join(", ") ?? "none"})`,
+  };
+
+  const scopeLabels = scopes.map((s) => SCOPE_LABELS[s]);
+  const scopeStored = scopes.join(",");
+  const scopeDetailParts: string[] = [];
+  if (scopes.includes("enterprise")) scopeDetailParts.push("enterprise-level endpoint");
+  if (scopes.includes("all_orgs")) scopeDetailParts.push("all discovered orgs");
+  if (scopes.includes("organization")) scopeDetailParts.push(opts.orgLogins?.join(", ") ?? "");
+  const scopeDetail = scopeDetailParts.filter(Boolean).join(" + ");
+
+  log(`═══ Ingestion Started ═══`);
+  log(`Enterprise: ${opts.enterpriseSlug}`);
+  log(`Scopes: ${scopeLabels.join(" + ")}`);
+  log(`Day filter: ${opts.day ?? "latest 28-day report"}`);
+  log(`Source: ${opts.source ?? "api"}`);
 
   const [logEntry] = await db
     .insert(ingestionLog)
     .values({
       ingestionDate: today,
       source: opts.source ?? "api",
+      scope: scopeStored,
+      scopeDetail,
       status: "running",
     })
     .returning();
 
-  log("Ingestion log entry created");
+  log(`Ingestion log entry #${logEntry.id} created`);
 
   try {
-    log("Fetching Copilot usage data from GitHub API…");
-    const { records, apiRequestCount } = await fetchCopilotUsage({
-      enterpriseSlug: opts.enterpriseSlug,
-      token: opts.token,
-      day: opts.day,
-    });
+    const fetchStartTime = Date.now();
+    log("── Phase 1: Fetching data from GitHub API ──");
 
-    log(`GitHub API responded — ${apiRequestCount} API requests made`);
+    let records: CopilotUsageRecord[] = [];
+    let aggregateRecords: CopilotAggregateRecord[] = [];
+    let orgs: EnterpriseOrg[] = [];
+    let apiRequestCount = 0;
+
+    // Run each scope phase, combining results
+    const hasEnterprise = scopes.includes("enterprise");
+    const hasAllOrgs = scopes.includes("all_orgs");
+    const hasOrganization = scopes.includes("organization");
+
+    if (hasEnterprise) {
+      log(`── Scope: Enterprise ──`);
+      log(`Calling enterprise-level user metrics endpoint for "${opts.enterpriseSlug}"…`);
+      const result = await fetchCopilotUsage({
+        enterpriseSlug: opts.enterpriseSlug,
+        token: opts.token,
+        day: opts.day,
+      });
+      records.push(...result.records);
+      apiRequestCount += result.apiRequestCount;
+      log(`Enterprise endpoint returned ${result.records.length} user records in ${result.apiRequestCount} API requests`);
+    }
+
+    if (hasAllOrgs || hasOrganization) {
+      const orgScopeLabel = hasAllOrgs ? "All Organizations" : "Specific Organizations";
+      log(`── Scope: ${orgScopeLabel} ──`);
+
+      const orgResult = await fetchMultiOrgCopilotUsage({
+        enterpriseSlug: opts.enterpriseSlug,
+        token: opts.token,
+        day: opts.day,
+        orgLogins: hasOrganization ? opts.orgLogins : undefined,
+        onLog: log,
+      });
+
+      // Deduplicate against enterprise records if both scopes are active
+      if (hasEnterprise && orgResult.records.length > 0) {
+        const existingKeys = new Set(records.map((r) => `${r.user_id}|${r.day}`));
+        let orgNew = 0;
+        let orgDup = 0;
+        for (const r of orgResult.records) {
+          const key = `${r.user_id}|${r.day}`;
+          if (!existingKeys.has(key)) {
+            records.push(r);
+            existingKeys.add(key);
+            orgNew++;
+          } else {
+            orgDup++;
+          }
+        }
+        log(`Org records: ${orgNew} new, ${orgDup} already covered by enterprise scope`);
+      } else {
+        records.push(...orgResult.records);
+      }
+
+      aggregateRecords.push(...orgResult.aggregateRecords);
+      orgs.push(...orgResult.orgs);
+      apiRequestCount += orgResult.apiRequestCount;
+      log(`Org fetch: ${orgResult.records.length} user records, ${orgResult.aggregateRecords.length} aggregates, ${orgResult.orgs.length} org(s), ${orgResult.apiRequestCount} API requests`);
+    }
+
+    const fetchDuration = ((Date.now() - fetchStartTime) / 1000).toFixed(1);
+    log(`── Phase 1 complete (${fetchDuration}s) ──`);
+    log(`Total API requests: ${apiRequestCount}`);
+    log(`Organizations: ${orgs.length > 0 ? orgs.map(o => o.login).join(", ") : "(enterprise-level only)"}`);
+    log(`Total user records: ${records.length}`);
+    log(`Total aggregate records: ${aggregateRecords.length}`);
+
+    if (records.length > 0) {
+      const dates = records.map(r => r.day).filter(Boolean);
+      const uniqueDates = [...new Set(dates)].sort();
+      if (uniqueDates.length > 0) {
+        log(`Date range: ${uniqueDates[0]} → ${uniqueDates[uniqueDates.length - 1]} (${uniqueDates.length} unique days)`);
+      }
+      const uniqueUsers = new Set(records.map(r => r.user_id));
+      log(`Unique users in dataset: ${uniqueUsers.size}`);
+    }
 
     if (records.length === 0) {
       log("No records returned from GitHub API. Nothing to ingest.");
       console.info("No records fetched. Nothing to ingest.");
       await db
         .update(ingestionLog)
-        .set({ status: "success", completedAt: new Date(), recordsFetched: 0, logMessages: messages.join("\n") })
+        .set({
+          status: "success",
+          completedAt: new Date(),
+          recordsFetched: 0,
+          orgsDiscovered: orgs.length,
+          logMessages: messages.join("\n"),
+        })
         .where(eq(ingestionLog.id, logEntry.id));
-      return { recordsFetched: 0, recordsInserted: 0, recordsSkipped: 0, apiRequests: apiRequestCount };
+      return { recordsFetched: 0, recordsInserted: 0, recordsSkipped: 0, aggregateRecords: 0, apiRequests: apiRequestCount, orgsDiscovered: orgs.length };
     }
 
-    log(`Fetched ${records.length} usage records`);
+    const loadStartTime = Date.now();
+    log(`── Phase 2: Loading into database ──`);
 
-    const { inserted, skipped } = await loadRecords(records, logEntry.id, log);
+    const { inserted, skipped, aggregateInserted } = await loadRecords(
+      records,
+      logEntry.id,
+      log,
+      orgs,
+      aggregateRecords
+    );
 
-    log(`Ingestion complete — fetched: ${records.length}, inserted: ${inserted}, skipped: ${skipped}, API requests: ${apiRequestCount}`);
+    const loadDuration = ((Date.now() - loadStartTime) / 1000).toFixed(1);
+    const totalDuration = ((Date.now() - fetchStartTime) / 1000).toFixed(1);
+
+    log(`── Phase 2 complete (${loadDuration}s) ──`);
+    log(`═══ Ingestion Summary ═══`);
+    log(`Total duration: ${totalDuration}s`);
+    log(`Records fetched: ${records.length}`);
+    log(`Records inserted: ${inserted}`);
+    log(`Duplicates skipped: ${skipped}`);
+    log(`Aggregate records: ${aggregateInserted}`);
+    log(`Organizations: ${orgs.length}`);
+    log(`API requests: ${apiRequestCount}`);
+    log(`Status: SUCCESS`);
 
     await db
       .update(ingestionLog)
@@ -450,23 +716,28 @@ export async function ingestCopilotUsage(opts: IngestOptions): Promise<{
         recordsFetched: records.length,
         recordsInserted: inserted,
         recordsSkipped: skipped,
+        aggregateRecords: aggregateInserted,
+        orgsDiscovered: orgs.length,
         apiRequests: apiRequestCount,
         logMessages: messages.join("\n"),
       })
       .where(eq(ingestionLog.id, logEntry.id));
 
-    console.info(`Ingestion complete: ${inserted} records processed, ${skipped} duplicates skipped.`);
+    console.info(`Ingestion complete: ${inserted} records processed, ${skipped} duplicates skipped, ${aggregateInserted} aggregates, ${orgs.length} orgs.`);
 
     return {
       recordsFetched: records.length,
       recordsInserted: inserted,
       recordsSkipped: skipped,
+      aggregateRecords: aggregateInserted,
       apiRequests: apiRequestCount,
+      orgsDiscovered: orgs.length,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Ingestion failed: ${message}`);
-    log(`ERROR: ${message}`);
+    log(`═══ ERROR ═══`);
+    log(`${message}`);
 
     await db
       .update(ingestionLog)
@@ -504,11 +775,13 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
     .values({
       ingestionDate: today,
       source: "file_upload",
+      scope: "file_upload",
+      scopeDetail: "Uploaded NDJSON file",
       status: "running",
     })
     .returning();
 
-  log("Ingestion log entry created");
+  log(`Ingestion log entry #${logEntry.id} created`);
 
   try {
     const records = opts.records;
@@ -524,9 +797,25 @@ export async function ingestFromFile(opts: FileIngestOptions): Promise<{
 
     log(`Parsed ${records.length} usage records from file`);
 
+    // Report summary stats
+    const dates = records.map(r => r.day).filter(Boolean);
+    const uniqueDates = [...new Set(dates)].sort();
+    if (uniqueDates.length > 0) {
+      log(`Date range: ${uniqueDates[0]} → ${uniqueDates[uniqueDates.length - 1]} (${uniqueDates.length} unique days)`);
+    }
+    const uniqueUsers = new Set(records.map(r => r.user_id));
+    log(`Unique users in file: ${uniqueUsers.size}`);
+    const orgIds = [...new Set(records.map(r => r.organization_id).filter(Boolean))];
+    if (orgIds.length > 0) {
+      log(`Organization IDs found: ${orgIds.join(", ")}`);
+    }
+
+    log("── Loading into database ──");
     const { inserted, skipped } = await loadRecords(records, logEntry.id, log);
 
-    log(`Ingestion complete — records: ${records.length}, inserted: ${inserted}, skipped: ${skipped}`);
+    log(`═══ File Ingestion Summary ═══`);
+    log(`Records: ${records.length} parsed, ${inserted} inserted, ${skipped} skipped`);
+    log(`Status: SUCCESS`);
 
     await db
       .update(ingestionLog)

@@ -126,8 +126,8 @@ export default function ConfigurationPage() {
         <div
           className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
             message.type === "success"
-              ? "border-green-200 bg-green-50 text-green-800"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+              : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300"
           }`}
         >
           {message.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
@@ -136,42 +136,54 @@ export default function ConfigurationPage() {
       )}
 
       {/* Info */}
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
         <p className="font-medium">How settings are resolved</p>
-        <p className="mt-1 text-xs text-blue-700">
+        <p className="mt-1 text-xs text-blue-700 dark:text-blue-400">
           Configure your GitHub token and enterprise slug here. Settings are stored securely in the database.
         </p>
       </div>
 
       {/* GitHub Token */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
+      <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">GitHub Personal Access Token</h2>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">GitHub Personal Access Token</h2>
           {data?.settings.github_token.configured && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
               <CheckCircle className="h-3 w-3" /> Configured
             </span>
           )}
         </div>
-        <p className="mb-3 text-xs text-gray-500">
-          Classic token scopes: <code className="rounded-sm bg-gray-100 px-1">manage_billing:copilot</code> (read),{" "}
-          <code className="rounded-sm bg-gray-100 px-1">read:enterprise</code>,{" "}
-          <code className="rounded-sm bg-gray-100 px-1">read:org</code>,{" "}
-          <code className="rounded-sm bg-gray-100 px-1">read:user</code>.{" "}
-          Fine-grained: <code className="rounded-sm bg-gray-100 px-1">Enterprise Copilot metrics</code> (read).{" "}
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <strong className="text-gray-700 dark:text-gray-300">Option 1 — Classic token</strong> (recommended for enterprise):{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">manage_billing:copilot</code>,{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">read:enterprise</code>,{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">read:org</code>.{" "}
           <a
-            href="https://github.com/settings/tokens/new?scopes=manage_billing:copilot,read:enterprise,read:org,read:user&description=Copilot+Insights+Dashboard"
+            href="https://github.com/settings/tokens/new?scopes=manage_billing:copilot,read:enterprise,read:org&description=Copilot+Insights+Dashboard"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
+            className="text-blue-600 hover:underline dark:text-blue-400"
           >
-            Generate token
+            Generate classic token →
+          </a>
+        </p>
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <strong className="text-gray-700 dark:text-gray-300">Option 2 — Fine-grained token</strong> (org-level only, does not support enterprise endpoints):{" "}
+          select your organization as the resource owner, then enable{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">GitHub Copilot Business</code> (read) under Organization permissions.{" "}
+          <a
+            href="https://github.com/settings/personal-access-tokens/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline dark:text-blue-400"
+          >
+            Generate fine-grained token →
           </a>
         </p>
 
         {data?.settings.github_token.configured && (
-          <p className="mb-3 text-xs text-gray-500">
-            Current: <code className="rounded-sm bg-gray-100 px-1">{data.settings.github_token.masked}</code>
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            Current: <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">{data.settings.github_token.masked}</code>
           </p>
         )}
 
@@ -182,13 +194,13 @@ export default function ConfigurationPage() {
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder={data?.settings.github_token.configured ? "Enter new token to update" : "ghp_xxxxxxxxxxxx"}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
               autoComplete="off"
             />
             <button
               type="button"
               onClick={() => setShowToken(!showToken)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
               aria-label={showToken ? "Hide token" : "Show token"}
             >
               {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -206,7 +218,7 @@ export default function ConfigurationPage() {
             <button
               onClick={() => handleDelete("github_token")}
               disabled={deleting === "github_token"}
-              className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
               title="Remove saved token"
             >
               {deleting === "github_token" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -216,16 +228,16 @@ export default function ConfigurationPage() {
       </div>
 
       {/* Enterprise Slug */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
+      <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">GitHub Enterprise Slug</h2>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">GitHub Enterprise Slug</h2>
           {data?.settings.github_enterprise_slug.configured && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
               <CheckCircle className="h-3 w-3" /> Configured
             </span>
           )}
         </div>
-        <p className="mb-3 text-xs text-gray-500">
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
           The slug of your GitHub Enterprise (e.g. &quot;my-enterprise&quot;). Found in your enterprise URL:
           github.com/enterprises/<strong>your-slug</strong>
         </p>
@@ -236,7 +248,7 @@ export default function ConfigurationPage() {
             value={slugInput}
             onChange={(e) => setSlugInput(e.target.value)}
             placeholder="my-enterprise"
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
           />
           <button
             onClick={() => handleSave("github_enterprise_slug", slugInput)}
@@ -250,13 +262,108 @@ export default function ConfigurationPage() {
             <button
               onClick={() => handleDelete("github_enterprise_slug")}
               disabled={deleting === "github_enterprise_slug"}
-              className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
               title="Remove saved slug"
             >
               {deleting === "github_enterprise_slug" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </button>
           )}
         </div>
+      </div>
+
+      {/* GitHub APIs Used */}
+      <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">GitHub APIs Used</h2>
+        <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+          This dashboard calls the following GitHub REST API endpoints. Ensure your PAT has the required scopes.
+        </p>
+        <div className="overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Endpoint</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Purpose</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">API Version</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Classic PAT Scopes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /enterprises/{"{slug}"}/copilot/metrics/reports/users-28-day/latest</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Enterprise user-level usage metrics (28-day)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /enterprises/{"{slug}"}/copilot/metrics/reports/users-1-day</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Enterprise user-level usage metrics (specific day)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /orgs/{"{org}"}/copilot/metrics/reports/users-28-day/latest</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Org user-level usage metrics (28-day)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code> or <code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /orgs/{"{org}"}/copilot/metrics/reports/users-1-day</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Org user-level usage metrics (specific day)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code> or <code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /orgs/{"{org}"}/copilot/metrics/reports/organization-28-day/latest</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Org aggregate metrics including PR summaries (28-day)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code> or <code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /orgs/{"{org}"}/copilot/metrics/reports/organization-1-day</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Org aggregate metrics including PR summaries (specific day)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code> or <code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /enterprises/{"{slug}"}/copilot/billing/seats</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Copilot seat assignments, license status, and activity</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code> or <code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /enterprises/{"{slug}"}/settings/billing/premium_request/usage</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Premium request billing usage per user</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">manage_billing:copilot</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /user/orgs</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Discover organizations accessible to the token</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /orgs/{"{org}"}/members</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">List organization members (enterprise user discovery)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2"><code className="rounded-sm bg-gray-100 px-1 text-gray-700 dark:bg-gray-700 dark:text-gray-300">read:org</code></td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">GET /users/{"{login}"}</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Resolve user display names (best-effort)</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-gray-400">2026-03-10</td>
+                <td className="px-3 py-2 text-gray-400 italic dark:text-gray-500">No scope required (public endpoint)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
+          All endpoints use <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">Bearer</code> token authentication.
+          For full coverage, the recommended classic PAT scopes are:{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">manage_billing:copilot</code>,{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">read:enterprise</code>,{" "}
+          <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">read:org</code>.
+        </p>
       </div>
 
     </div>

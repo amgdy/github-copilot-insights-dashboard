@@ -11,7 +11,12 @@ import {
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { DataSourceBanner } from "@/components/layout/report-filters";
+import { DataSourceBanner, formatDateRangeLabel } from "@/components/layout/report-filters";
+import { useChartOptions } from "@/lib/theme/chart-theme";
+import { useTranslation } from "@/lib/i18n/locale-provider";
+import { ConfigurationBanner } from "@/components/layout/configuration-banner";
+import { EmptyState } from "@/components/ui/empty-state";
+import type { DataRange } from "@/components/layout/report-filters";
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, Tooltip, Legend
@@ -46,32 +51,7 @@ interface ModelsData {
 
 /* ── Chart helpers ── */
 
-const tooltipStyle = {
-  backgroundColor: "#fff",
-  titleColor: "#111827",
-  bodyColor: "#374151",
-  borderColor: "#e5e7eb",
-  borderWidth: 1,
-  cornerRadius: 8,
-  padding: 10,
-  boxPadding: 4,
-  titleFont: { weight: "bold" as const, size: 12 },
-  bodyFont: { size: 11 },
-};
-
-const barOpts = {
-  responsive: true,
-  maintainAspectRatio: false,
-  indexAxis: "y" as const,
-  plugins: {
-    legend: { display: false },
-    tooltip: tooltipStyle,
-  },
-  scales: {
-    x: { grid: { color: "#f0f0f0" }, ticks: { font: { size: 11 }, color: "#9ca3af" } },
-    y: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#374151" } },
-  },
-};
+// tooltipStyle and barOpts moved to component via useChartOptions
 
 const FEATURE_COLORS = [
   "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981",
@@ -81,12 +61,26 @@ const FEATURE_COLORS = [
 /* ── Component ── */
 
 export default function ModelsPage() {
+  const { commonOptions, isDark } = useChartOptions();
+  const { t } = useTranslation();
+  const barOpts = {
+    ...commonOptions,
+    indexAxis: "y" as const,
+    scales: {
+      x: { ...commonOptions.scales.y },
+      y: { ...commonOptions.scales.x, ticks: { ...commonOptions.scales.x.ticks, color: isDark ? "#cbd5e1" : "#374151" } },
+    },
+  };
   const [data, setData] = useState<ModelsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<"all" | "premium" | "included">("all");
-  const [enabledFilter, setEnabledFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const [dataRange, setDataRange] = useState<DataRange | null>(null);
+
+  useEffect(() => {
+    fetch("/api/data-range").then(r => r.ok ? r.json() : null).then(d => { if (d) setDataRange(d); }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -105,8 +99,6 @@ export default function ModelsPage() {
     if (!data) return [];
     return data.models.filter((m) => {
       if (tierFilter !== "all" && m.tier !== tierFilter) return false;
-      if (enabledFilter === "enabled" && !m.isEnabled) return false;
-      if (enabledFilter === "disabled" && m.isEnabled) return false;
       if (search) {
         const q = search.toLowerCase();
         return (
@@ -115,7 +107,7 @@ export default function ModelsPage() {
       }
       return true;
     });
-  }, [data, search, tierFilter, enabledFilter]);
+  }, [data, search, tierFilter]);
 
   const usageBar = useMemo(() => {
     if (!data) return null;
@@ -160,15 +152,16 @@ export default function ModelsPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-400" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="mx-auto max-w-4xl py-10 text-center">
-        <p className="text-red-600">Error: {error}</p>
+      <div className="mx-auto max-w-6xl space-y-6">
+        <ConfigurationBanner />
+        <EmptyState hasData={!!dataRange?.lastSyncAt} />
       </div>
     );
   }
@@ -176,36 +169,34 @@ export default function ModelsPage() {
   if (!data) return null;
 
   const premiumCount = data.models.filter((m) => m.isPremium).length;
-  const enabledCount = data.models.filter((m) => m.isEnabled).length;
   const activeModels = data.models.filter((m) => m.usage && m.usage.totalRequests > 0).length;
   const totalRequests = data.models.reduce((s, m) => s + (m.usage?.totalRequests ?? 0), 0);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <ConfigurationBanner />
       <div>
         <Breadcrumb items={[{ label: "Models", href: "/models" }]} />
-        <h1 className="mt-1 text-xl font-bold text-gray-900">GitHub Copilot Models</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{t("models.title")}</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           Available Copilot models and their enablement status.
-          Usage data from the last {data.period.days} days.
+          Usage data: {formatDateRangeLabel(data.period.start, data.period.end)}.
         </p>
       </div>
       <DataSourceBanner />
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           { label: "Total Models", value: data.models.length, color: "text-blue-600" },
-          { label: "Enabled", value: enabledCount, color: "text-green-600" },
           { label: "Premium Models", value: premiumCount, color: "text-purple-600" },
-          { label: "Active Models", value: activeModels, sub: `(${data.period.days}d)`, color: "text-indigo-600" },
-          { label: "Total Requests", value: totalRequests.toLocaleString(), sub: `(${data.period.days}d)`, color: "text-gray-900" },
+          { label: "Active Models", value: activeModels, color: "text-indigo-600" },
+          { label: "Total Requests", value: totalRequests.toLocaleString(), color: "text-gray-900 dark:text-gray-100" },
         ].map((kpi) => (
-          <div key={kpi.label} className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-xs text-gray-500">{kpi.label}</p>
+          <div key={kpi.label} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">{kpi.label}</p>
             <p className={`text-2xl font-bold ${kpi.color}`}>
               {kpi.value}
-              {kpi.sub && <span className="ml-1 text-xs font-normal text-gray-400">{kpi.sub}</span>}
             </p>
           </div>
         ))}
@@ -213,25 +204,21 @@ export default function ModelsPage() {
 
       {/* ── Charts ── */}
       {usageBar && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-700">Requests by Model</h3>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Requests by Model</h3>
           <div className="h-64"><Bar data={usageBar} options={barOpts} /></div>
         </div>
       )}
 
       {featureBar && Object.keys(data.models[0]?.featureBreakdown ?? {}).length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-700">Requests by Feature (All Models)</h3>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Requests by Feature (All Models)</h3>
           <div className="h-48">
             <Bar
               data={featureBar}
               options={{
-                ...barOpts,
+                ...commonOptions,
                 indexAxis: "x" as const,
-                scales: {
-                  x: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#9ca3af" } },
-                  y: { grid: { color: "#f0f0f0" }, ticks: { font: { size: 11 }, color: "#9ca3af" } },
-                },
               }}
             />
           </div>
@@ -239,23 +226,14 @@ export default function ModelsPage() {
       )}
 
       {/* ── Models Table ── */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
+      <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-gray-900">All Models</h2>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">All Models</h2>
           <div className="flex gap-2">
-            <select
-              value={enabledFilter}
-              onChange={(e) => setEnabledFilter(e.target.value as typeof enabledFilter)}
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-hidden"
-            >
-              <option value="all">All Status</option>
-              <option value="enabled">Enabled</option>
-              <option value="disabled">Disabled</option>
-            </select>
             <select
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value as typeof tierFilter)}
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-hidden"
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-hidden dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
             >
               <option value="all">All Tiers</option>
               <option value="premium">Premium</option>
@@ -265,8 +243,8 @@ export default function ModelsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search models…"
-              className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+              placeholder={t("models.searchModels")}
+              className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
             />
           </div>
         </div>
@@ -274,9 +252,8 @@ export default function ModelsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-gray-200 text-xs text-gray-500">
+              <tr className="border-b border-gray-200 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
                 <th className="pb-2 pr-4 font-medium">Model</th>
-                <th className="pb-2 pr-4 font-medium">Status</th>
                 <th className="pb-2 pr-4 font-medium">Tier</th>
                 <th className="pb-2 pr-4 font-medium text-right">Requests</th>
                 <th className="pb-2 pr-4 font-medium text-right">Users</th>
@@ -289,51 +266,40 @@ export default function ModelsPage() {
             <tbody>
               {filteredModels.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-gray-400">
+                  <td colSpan={8} className="py-8 text-center text-gray-400 dark:text-gray-500">
                     No models found.
                   </td>
                 </tr>
               ) : (
                 filteredModels.map((m) => (
-                  <tr key={m.modelName} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <tr key={m.modelName} className="border-b border-gray-50 hover:bg-gray-50/50 dark:border-gray-700 dark:hover:bg-gray-700/50">
                     <td className="py-2.5 pr-4">
-                      <p className="font-medium text-gray-900">{m.modelName}</p>
-                    </td>
-                    <td className="py-2.5 pr-4">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          m.isEnabled
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {m.isEnabled ? "Enabled" : "Disabled"}
-                      </span>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">{m.modelName}</p>
                     </td>
                     <td className="py-2.5 pr-4">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
                           m.isPremium
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-green-100 text-green-700"
+                            ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                            : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                         }`}
                       >
                         {m.tier}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-gray-700">
+                    <td className="py-2.5 pr-4 text-right tabular-nums text-gray-700 dark:text-gray-300">
                       {m.usage ? m.usage.totalRequests.toLocaleString() : "—"}
                     </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-gray-700">
+                    <td className="py-2.5 pr-4 text-right tabular-nums text-gray-700 dark:text-gray-300">
                       {m.usage ? m.usage.uniqueUsers : "—"}
                     </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-gray-700">
+                    <td className="py-2.5 pr-4 text-right tabular-nums text-gray-700 dark:text-gray-300">
                       {m.usage ? m.usage.activeDays : "—"}
                     </td>
-                    <td className="py-2.5 pr-4 text-xs text-gray-500">
+                    <td className="py-2.5 pr-4 text-xs text-gray-500 dark:text-gray-400">
                       {m.usage?.firstSeen ?? "—"}
                     </td>
-                    <td className="py-2.5 text-xs text-gray-500">
+                    <td className="py-2.5 text-xs text-gray-500 dark:text-gray-400">
                       {m.usage?.lastSeen ?? "—"}
                     </td>
                     <td className="py-2.5">
@@ -362,15 +328,7 @@ export default function ModelsPage() {
         </div>
       </div>
 
-      {/* ── Info Note ── */}
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-        <p className="font-medium">About model enablement</p>
-        <p className="mt-1 text-xs text-blue-700">
-          Model enablement status reflects the enterprise AI Controls configuration. GitHub does not currently
-          provide a REST API for model enablement — the status shown here is maintained from seed data and may
-          need manual updates via the database when the enterprise admin changes model availability.
-        </p>
-      </div>
+
     </div>
   );
 }

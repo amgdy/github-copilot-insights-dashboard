@@ -17,6 +17,11 @@ interface AssigningTeam {
   slug: string;
 }
 
+interface SeatOrganization {
+  login: string;
+  id?: number;
+}
+
 interface CopilotSeat {
   created_at: string;
   updated_at: string;
@@ -26,6 +31,7 @@ interface CopilotSeat {
   plan_type: string;
   assignee: SeatAssignee;
   assigning_team: AssigningTeam | null;
+  organization?: SeatOrganization;
 }
 
 interface SeatsResponse {
@@ -70,6 +76,18 @@ export async function GET() {
       if (!response.ok) {
         const text = await response.text();
         console.error(`GitHub API error: ${response.status} ${response.statusText}`, text);
+        if (response.status === 403) {
+          return NextResponse.json(
+            { error: "Access denied. Your PAT may not have the required scopes. Please ensure it has: manage_billing:copilot (read) or manage_billing:enterprise (read). Update scopes at https://github.com/settings/tokens" },
+            { status: 403 }
+          );
+        }
+        if (response.status === 404) {
+          return NextResponse.json(
+            { error: "Enterprise not found. Please verify the enterprise slug in Settings and ensure your PAT has access to this enterprise." },
+            { status: 404 }
+          );
+        }
         return NextResponse.json(
           { error: `GitHub API error: ${response.status} ${response.statusText}` },
           { status: response.status }
@@ -130,6 +148,8 @@ export async function GET() {
       earliestAssignment: string;
       status: string;
       monthlyCost: number;
+      organizations: string[];
+      assignedVia: string;
     }> = [];
 
     for (const [login, seats] of userSeatsMap) {
@@ -207,6 +227,11 @@ export async function GET() {
         }
       }
 
+      // Collect unique orgs and assignment methods for this user
+      const userOrgs = [...new Set(seats.map((s) => s.organization?.login).filter(Boolean))] as string[];
+      const hasTeam = seats.some((s) => s.assigning_team);
+      const assignedVia = hasTeam ? "team" : (userOrgs.length > 0 ? "organization" : "enterprise");
+
       allUsers.push({
         login,
         displayName,
@@ -217,6 +242,8 @@ export async function GET() {
         earliestAssignment: earliestCreated,
         status,
         monthlyCost: price,
+        organizations: userOrgs,
+        assignedVia,
       });
     }
 
@@ -229,6 +256,7 @@ export async function GET() {
         planType: seat.plan_type || "unknown",
         assignmentMethod: seat.assigning_team ? "team" : "direct",
         assigningTeam: seat.assigning_team?.name ?? null,
+        organization: seat.organization?.login ?? null,
         createdAt: seat.created_at,
       };
     });

@@ -33,3 +33,25 @@ export async function getGitHubConfig(): Promise<{
   const slug = await getSetting("github_enterprise_slug");
   return { token, enterpriseSlug: slug };
 }
+
+export type SyncScope = "enterprise" | "all_orgs" | "organization";
+
+export async function getSyncScopeConfig(): Promise<{
+  scopes: SyncScope[];
+  orgLogins: string[];
+}> {
+  const raw = (await getSetting("sync_scope")) ?? "enterprise";
+  const orgLoginsRaw = await getSetting("sync_org_logins");
+  const orgLogins = orgLoginsRaw
+    ? orgLoginsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+  const validScopes: SyncScope[] = ["enterprise", "all_orgs", "organization"];
+  const scopes = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is SyncScope => validScopes.includes(s as SyncScope));
+  return {
+    scopes: scopes.length > 0 ? scopes : ["enterprise"],
+    orgLogins,
+  };
+}

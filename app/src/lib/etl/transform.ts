@@ -5,9 +5,21 @@
  */
 
 import { createHash } from "crypto";
-import type { CopilotUsageRecord } from "@/types/copilot-api";
+import type { CopilotUsageRecord, CopilotAggregateRecord } from "@/types/copilot-api";
 
 // ── Dimension Extraction ──
+
+/** Extract unique organization IDs from records. Returns numeric IDs (strings parsed to ints). */
+export function extractUniqueOrgIds(records: CopilotUsageRecord[]): number[] {
+  const orgIds = new Set<number>();
+  for (const r of records) {
+    if (r.organization_id) {
+      const id = parseInt(String(r.organization_id), 10);
+      if (id > 0) orgIds.add(id);
+    }
+  }
+  return Array.from(orgIds);
+}
 
 export function extractUniqueIdes(records: CopilotUsageRecord[]): string[] {
   const ides = new Set<string>();
@@ -60,12 +72,14 @@ export function extractUniqueModels(records: CopilotUsageRecord[]): string[] {
 export interface FactUsageDailyRow {
   day: string;
   enterpriseId: number;
+  organizationId: number | null;
   userId: number;
   userLogin: string;
   userInitiatedInteractionCount: number;
   codeGenerationActivityCount: number;
   codeAcceptanceActivityCount: number;
   usedAgent: boolean;
+  usedCopilotCodingAgent: boolean;
   usedChat: boolean;
   usedCli: boolean;
   locSuggestedToAddSum: number;
@@ -139,12 +153,14 @@ export function transformToFactUsage(record: CopilotUsageRecord): FactUsageDaily
   return {
     day: record.day,
     enterpriseId: parseInt(String(record.enterprise_id), 10) || 0,
+    organizationId: record.organization_id ? parseInt(String(record.organization_id), 10) || null : null,
     userId: record.user_id,
     userLogin: record.user_login,
     userInitiatedInteractionCount: record.user_initiated_interaction_count ?? 0,
     codeGenerationActivityCount: record.code_generation_activity_count ?? 0,
     codeAcceptanceActivityCount: record.code_acceptance_activity_count ?? 0,
     usedAgent: record.used_agent ?? false,
+    usedCopilotCodingAgent: record.used_copilot_coding_agent ?? false,
     usedChat: record.used_chat ?? false,
     usedCli: record.used_cli ?? false,
     locSuggestedToAddSum: record.loc_suggested_to_add_sum ?? 0,
@@ -259,4 +275,71 @@ function stableStringify(value: unknown): string {
 export function computeRecordHash(record: CopilotUsageRecord): string {
   const canonical = stableStringify(record);
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+// ── Aggregate Record Transform ──
+
+export interface FactOrgAggregateDailyRow {
+  day: string;
+  orgLogin: string | null;
+  scope: "enterprise" | "organization";
+  dailyActiveUsers: number;
+  weeklyActiveUsers: number;
+  monthlyActiveUsers: number;
+  monthlyActiveAgentUsers: number;
+  monthlyActiveChatUsers: number;
+  dailyActiveCliUsers: number;
+  prTotalCreated: number;
+  prTotalReviewed: number;
+  prTotalMerged: number;
+  prMedianMinutesToMerge: string | null;
+  prTotalSuggestions: number;
+  prTotalAppliedSuggestions: number;
+  prTotalCreatedByCopilot: number;
+  prTotalReviewedByCopilot: number;
+  prTotalMergedCreatedByCopilot: number;
+  prTotalMergedReviewedByCopilot: number;
+  prMedianMinutesToMergeCopilotAuthored: string | null;
+  prMedianMinutesToMergeCopilotReviewed: string | null;
+  prTotalCopilotSuggestions: number;
+  prTotalCopilotAppliedSuggestions: number;
+}
+
+export function transformToFactOrgAggregate(
+  record: CopilotAggregateRecord
+): FactOrgAggregateDailyRow {
+  const pr = record.pull_requests;
+  return {
+    day: record.day,
+    orgLogin: record._orgLogin ?? null,
+    scope: record._scope ?? "organization",
+    dailyActiveUsers: record.daily_active_users ?? 0,
+    weeklyActiveUsers: record.weekly_active_users ?? 0,
+    monthlyActiveUsers: record.monthly_active_users ?? 0,
+    monthlyActiveAgentUsers: record.monthly_active_agent_users ?? 0,
+    monthlyActiveChatUsers: record.monthly_active_chat_users ?? 0,
+    dailyActiveCliUsers: record.daily_active_cli_users ?? 0,
+    prTotalCreated: pr?.total_created ?? 0,
+    prTotalReviewed: pr?.total_reviewed ?? 0,
+    prTotalMerged: pr?.total_merged ?? 0,
+    prMedianMinutesToMerge: pr?.median_minutes_to_merge != null
+      ? String(pr.median_minutes_to_merge)
+      : null,
+    prTotalSuggestions: pr?.total_suggestions ?? 0,
+    prTotalAppliedSuggestions: pr?.total_applied_suggestions ?? 0,
+    prTotalCreatedByCopilot: pr?.total_created_by_copilot ?? 0,
+    prTotalReviewedByCopilot: pr?.total_reviewed_by_copilot ?? 0,
+    prTotalMergedCreatedByCopilot: pr?.total_merged_created_by_copilot ?? 0,
+    prTotalMergedReviewedByCopilot: pr?.total_merged_reviewed_by_copilot ?? 0,
+    prMedianMinutesToMergeCopilotAuthored:
+      pr?.median_minutes_to_merge_copilot_authored != null
+        ? String(pr.median_minutes_to_merge_copilot_authored)
+        : null,
+    prMedianMinutesToMergeCopilotReviewed:
+      pr?.median_minutes_to_merge_copilot_reviewed != null
+        ? String(pr.median_minutes_to_merge_copilot_reviewed)
+        : null,
+    prTotalCopilotSuggestions: pr?.total_copilot_suggestions ?? 0,
+    prTotalCopilotAppliedSuggestions: pr?.total_copilot_applied_suggestions ?? 0,
+  };
 }

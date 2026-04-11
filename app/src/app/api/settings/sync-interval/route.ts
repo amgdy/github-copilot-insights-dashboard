@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSetting, setSetting } from "@/lib/db/settings";
 import { updateInterval } from "@/lib/etl/scheduler";
 import { z } from "zod";
+import { logAudit, getClientIp } from "@/lib/audit";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +48,8 @@ export async function GET() {
       note: "GitHub Copilot Metrics API data refreshes approximately once every 24 hours.",
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to read sync interval";
-    console.error("Sync interval GET error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Sync interval GET error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to read sync interval") }, { status: 500 });
   }
 }
 
@@ -61,6 +62,12 @@ export async function PUT(request: NextRequest) {
     updateInterval(intervalMinutes);
     const label = formatInterval(intervalMinutes);
     console.info(`Sync interval updated to ${label}.`);
+    logAudit({
+      action: "sync_interval_updated",
+      category: "settings",
+      details: { intervalMinutes, label },
+      ipAddress: getClientIp(request),
+    });
 
     return NextResponse.json({
       success: true,
@@ -74,8 +81,7 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
-    const message = err instanceof Error ? err.message : "Failed to save sync interval";
-    console.error("Sync interval PUT error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Sync interval PUT error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to save sync interval") }, { status: 500 });
   }
 }

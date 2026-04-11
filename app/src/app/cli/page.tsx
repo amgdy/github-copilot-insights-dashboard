@@ -15,6 +15,8 @@ import {
 } from "chart.js";
 import { Line, Bar, Doughnut } from "react-chartjs-2";
 import { DataTable } from "@/components/ui/data-table";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePdfExport } from "@/components/ui/pdf-export";
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement,
@@ -103,53 +105,33 @@ function topN(data: Array<{ name: string; value: number }>, n = 8) {
   return top;
 }
 
-import { ReportFilters, DataSourceBanner, type FilterState } from "@/components/layout/report-filters";
-
-/* ── Shared Chart Options ── */
-
-const commonOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "#fff",
-      titleColor: "#111827",
-      bodyColor: "#374151",
-      borderColor: "#e5e7eb",
-      borderWidth: 1,
-      cornerRadius: 8,
-      padding: 10,
-      boxPadding: 4,
-      titleFont: { weight: "bold" as const, size: 12 },
-      bodyFont: { size: 11 },
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 11 }, color: "#9ca3af" },
-    },
-    y: {
-      grid: { color: "#f0f0f0" },
-      ticks: { font: { size: 11 }, color: "#9ca3af" },
-    },
-  },
-};
+import { useChartOptions } from "@/lib/theme/chart-theme";
+import { useTranslation } from "@/lib/i18n/locale-provider";
+import { ReportFilters, DataSourceBanner, formatDateRangeLabel, type FilterState, type DataRange } from "@/components/layout/report-filters";
+import { ConfigurationBanner } from "@/components/layout/configuration-banner";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ── Component ── */
 
 export default function CliPage() {
+  const { commonOptions, doughnutOptions, legendPreset } = useChartOptions();
+  const { t } = useTranslation();
   const [data, setData] = useState<CliData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { ref: reportRef, ExportButton: PdfButton } = usePdfExport("copilot-cli");
+  const [dataRange, setDataRange] = useState<DataRange | null>(null);
+
+  const [appliedFilters, setAppliedFilters] = useState<FilterState | null>(null);
 
   const fetchData = useCallback(async (filters: FilterState) => {
+    setAppliedFilters(filters);
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filters.startDate) params.set("start", filters.startDate);
       if (filters.endDate) params.set("end", filters.endDate);
       if (filters.userId) params.set("userId", filters.userId);
+      if (filters.orgId) params.set("orgId", filters.orgId);
       const res = await fetch(`/api/metrics/cli?${params}`);
       if (res.ok) setData(await res.json());
     } catch (err) {
@@ -326,12 +308,12 @@ export default function CliPage() {
 
   const lineOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
   });
 
   const stackedBarOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
     scales: {
       ...commonOptions.scales,
       x: { ...commonOptions.scales.x, stacked: true },
@@ -339,15 +321,7 @@ export default function CliPage() {
     },
   });
 
-  const doughnutOpts = {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "55%",
-    plugins: {
-      legend: { position: "right" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 }, padding: 12 } },
-      tooltip: commonOptions.plugins.tooltip,
-    },
-  };
+  const doughnutOpts = doughnutOptions;
 
   const percentOpts = {
     ...commonOptions,
@@ -358,105 +332,112 @@ export default function CliPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div ref={reportRef} className="space-y-6">
+      <ConfigurationBanner />
       {/* Header + Filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">GitHub CLI Impact</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t("cli.title")}</h1>
           <p className="text-sm text-gray-500">
-            Copilot CLI adoption, session activity, token consumption, and productivity impact
+            {t("cli.subtitle")}{appliedFilters ? ` — ${formatDateRangeLabel(appliedFilters.startDate, appliedFilters.endDate)}` : ""}
           </p>
         </div>
-        <ReportFilters onApply={fetchData} />
+        <div className="flex items-center gap-2">
+          <PdfButton />
+          <ReportFilters onApply={fetchData} onDataRange={setDataRange} />
+        </div>
       </div>
       <DataSourceBanner />
 
       {loading && !data ? (
-        <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading...</div>
+        <LoadingSpinner message={t("cli.loadingCli")} />
+      ) : !data || data.cliUsersOverTime.length === 0 ? (
+        <EmptyState hasData={!!dataRange?.lastSyncAt} />
       ) : (
         <>
           {/* KPI Cards – Row 1: Adoption */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            <Kpi label="CLI Users" value={kpi?.cliUsers ?? 0} sub={`of ${kpi?.activeUsers ?? 0} active`} />
-            <Kpi label="Adoption Rate" value={`${kpi?.cliAdoptionRate ?? 0}%`} sub="Active users using CLI" />
-            <Kpi label="Acceptance Rate" value={`${kpi?.cliAcceptanceRate ?? 0}%`} sub="Code accepted from CLI users" />
-            <Kpi label="LOC Added" value={fmtNum(kpi?.cliLocAdded ?? 0)} sub="By CLI users" />
-            <Kpi label="Code Gen Share" value={`${kpi?.cliCodeGenShare ?? 0}%`} sub="Of total code generation" />
+            <Kpi label={t("cli.cliUsers")} value={kpi?.cliUsers ?? 0} sub={t("cli.ofActive", kpi?.activeUsers ?? 0)} />
+            <Kpi label={t("cli.adoptionRate")} value={`${kpi?.cliAdoptionRate ?? 0}%`} sub={t("cli.activeUsersUsingCli")} />
+            <Kpi label={t("cli.acceptanceRate")} value={`${kpi?.cliAcceptanceRate ?? 0}%`} sub={t("cli.codeAcceptedFromCli")} />
+            <Kpi label={t("cli.locAdded")} value={fmtNum(kpi?.cliLocAdded ?? 0)} sub={t("cli.byCliUsers")} />
+            <Kpi label={t("cli.codeGenShare")} value={`${kpi?.cliCodeGenShare ?? 0}%`} sub={t("cli.ofTotalCodeGen")} />
           </div>
 
           {/* KPI Cards – Row 2: CLI Activity (from factCliDaily) */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            <Kpi label="CLI Sessions" value={fmtNum(kpi?.totalSessions ?? 0)} sub="Total sessions" />
-            <Kpi label="CLI Requests" value={fmtNum(kpi?.totalRequests ?? 0)} sub="Total requests" />
-            <Kpi label="Prompt Tokens" value={fmtNum(kpi?.totalPromptTokens ?? 0)} sub="Input token consumption" />
-            <Kpi label="Completion Tokens" value={fmtNum(kpi?.totalCompletionTokens ?? 0)} sub="Output token consumption" />
+            <Kpi label={t("cli.cliSessions")} value={fmtNum(kpi?.totalSessions ?? 0)} sub={t("cli.totalSessions")} />
+            <Kpi label={t("cli.cliRequests")} value={fmtNum(kpi?.totalRequests ?? 0)} sub={t("cli.totalRequests")} />
+            <Kpi label={t("cli.promptTokens")} value={fmtNum(kpi?.totalPromptTokens ?? 0)} sub={t("cli.inputTokenConsumption")} />
+            <Kpi label={t("cli.completionTokens")} value={fmtNum(kpi?.totalCompletionTokens ?? 0)} sub={t("cli.outputTokenConsumption")} />
           </div>
 
           {/* CLI Users Over Time */}
-          <Card title="CLI users over time" subtitle="Area chart — daily CLI users vs total active users">
+          <Card title={t("cli.cliUsersOverTime")} subtitle={t("cli.cliUsersOverTimeDesc")}>
             {cliUsersChart && <div className="h-[300px]"><Line data={cliUsersChart} options={lineOpts(true)} /></div>}
           </Card>
 
           {/* CLI Sessions & Requests + Token Usage */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="CLI sessions & requests" subtitle="Line chart — daily session and request volume">
+            <Card title={t("cli.cliSessionsRequests")} subtitle={t("cli.cliSessionsRequestsDesc")}>
               {cliActivityChart ? (
                 <div className="h-[300px]"><Line data={cliActivityChart} options={lineOpts(true)} /></div>
               ) : (
-                <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">No CLI session data yet</div>
+                <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">{t("cli.noCliSessionData")}</div>
               )}
             </Card>
-            <Card title="Token consumption" subtitle="Stacked bar — daily prompt vs completion tokens">
+            <Card title={t("cli.tokenConsumption")} subtitle={t("cli.tokenConsumptionDesc")}>
               {tokenUsageChart ? (
                 <div className="h-[300px]"><Bar data={tokenUsageChart} options={stackedBarOpts(true)} /></div>
               ) : (
-                <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">No token data yet</div>
+                <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">{t("cli.noTokenData")}</div>
               )}
             </Card>
           </div>
 
           {/* Weekly Adoption Rate + CLI Version Distribution */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="Weekly CLI adoption rate" subtitle="Bar chart — % of active users using CLI each week">
+            <Card title={t("cli.weeklyCliAdoptionRate")} subtitle={t("cli.weeklyCliAdoptionRateDesc")}>
               {weeklyAdoptionChart && <div className="h-[300px]"><Bar data={weeklyAdoptionChart} options={percentOpts} /></div>}
             </Card>
-            <Card title="CLI version distribution" subtitle="Doughnut — sessions by CLI version">
+            <Card title={t("cli.cliVersionDistribution")} subtitle={t("cli.cliVersionDistributionDesc")}>
               {versionDonut ? (
                 <div className="h-[320px]"><Doughnut data={versionDonut} options={doughnutOpts} /></div>
               ) : (
-                <div className="flex h-[320px] items-center justify-center text-sm text-gray-400">No version data yet</div>
+                <div className="flex h-[320px] items-center justify-center text-sm text-gray-400">{t("cli.noVersionData")}</div>
               )}
             </Card>
           </div>
 
           {/* CLI vs Non-CLI Code Generation + Productivity */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="CLI vs non-CLI code generation" subtitle="Stacked bar — daily code generation comparison">
+            <Card title={t("cli.cliVsNonCli")} subtitle={t("cli.cliVsNonCliDesc")}>
               {codeGenChart && <div className="h-[300px]"><Bar data={codeGenChart} options={stackedBarOpts(true)} /></div>}
             </Card>
-            <Card title="CLI vs non-CLI productivity" subtitle="Line chart — avg code generation per user per day">
+            <Card title={t("cli.cliVsNonCliProductivity")} subtitle={t("cli.cliVsNonCliProductivityDesc")}>
               {productivityChart && <div className="h-[300px]"><Line data={productivityChart} options={lineOpts(true)} /></div>}
             </Card>
           </div>
 
           {/* Top CLI Users Table */}
-          <Card title="Top CLI users" subtitle="Sortable table with CLI session details and code productivity">
+          <Card title={t("cli.topCliUsers")} subtitle={t("cli.topCliUsersDesc")}>
             <DataTable
               columns={[
-                { key: "displayLabel", header: "User", render: (value: unknown) => <span className="font-medium text-gray-900">{String(value)}</span> },
-                { key: "daysActive", header: "Days Active", align: "right" },
-                { key: "sessions", header: "Sessions", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "requests", header: "Requests", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "codeGenerated", header: "Code Generated", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "codeAccepted", header: "Code Accepted", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "acceptanceRate", header: "Accept %", align: "right", render: (value: unknown) => `${value}%` },
-                { key: "locAdded", header: "LOC Added", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "tokens", header: "Tokens", align: "right", render: (value: unknown) => fmtNum(Number(value)) },
+                { key: "displayLabel", header: t("common.user"), render: (value: unknown) => <span className="font-medium text-gray-900 dark:text-gray-100">{String(value)}</span> },
+                { key: "daysActive", header: t("common.daysActive"), align: "right" },
+                { key: "sessions", header: t("cli.sessions"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "requests", header: t("cli.requests"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "codeGenerated", header: t("common.codeGenerated"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "codeAccepted", header: t("common.codeAccepted"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "acceptanceRate", header: t("common.acceptPercent"), align: "right", render: (value: unknown) => `${value}%` },
+                { key: "locAdded", header: t("common.locAdded"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "tokens", header: t("cli.tokens"), align: "right", render: (value: unknown) => fmtNum(Number(value)) },
               ]}
               data={(data?.topCliUsers ?? []) as unknown as Record<string, unknown>[]}
-              emptyMessage="No CLI users found"
-              searchPlaceholder="Search users..."
+              emptyMessage={t("cli.noCliUsersFound")}
+              searchPlaceholder={t("common.searchUsersEllipsis")}
               pageSize={25}
+              defaultSortKey="displayLabel"
             />
           </Card>
         </>
@@ -469,10 +450,10 @@ export default function CliPage() {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -481,12 +462,12 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 function Kpi({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{sub}</p>}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { ingestFromFile } from "@/lib/etl/ingest";
 import type { CopilotUsageRecord } from "@/types/copilot-api";
+import { logAudit, getClientIp } from "@/lib/audit";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -61,9 +63,8 @@ export async function POST(request: Request) {
       }
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to parse file";
     return new Response(
-      JSON.stringify({ error: message }),
+      JSON.stringify({ error: safeErrorMessage(err, "Failed to parse file") }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -89,9 +90,16 @@ export async function POST(request: Request) {
           },
         });
 
+        logAudit({
+          action: "data_sync_upload",
+          category: "data_sync",
+          details: { recordCount: records.length },
+          ipAddress: getClientIp(request),
+        });
+
         send("done", JSON.stringify(result));
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Ingestion failed";
+        const message = safeErrorMessage(err, "Ingestion failed");
         send("error", message);
       } finally {
         controller.close();

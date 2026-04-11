@@ -15,6 +15,8 @@ import {
 } from "chart.js";
 import { Line, Bar, Doughnut } from "react-chartjs-2";
 import { DataTable } from "@/components/ui/data-table";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePdfExport } from "@/components/ui/pdf-export";
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement,
@@ -34,6 +36,10 @@ interface AgentData {
     agentAcceptanceRate: number;
     totalCodeGen: number;
     agentLocAdded: number;
+    ideAgentUsers: number;
+    codingAgentUsers: number;
+    ideAgentInteractions: number;
+    codingAgentInteractions: number;
   };
   agentUsersOverTime: Array<{ date: string; agentUsers: number; totalUsers: number }>;
   agentModeByDay: Array<Record<string, string | number>>;
@@ -91,53 +97,32 @@ function topN(data: Array<{ name: string; value: number | string }>, n = 10) {
   return top;
 }
 
-import { ReportFilters, DataSourceBanner, type FilterState } from "@/components/layout/report-filters";
-
-/* ── Shared Chart Options ── */
-
-const commonOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "#fff",
-      titleColor: "#111827",
-      bodyColor: "#374151",
-      borderColor: "#e5e7eb",
-      borderWidth: 1,
-      cornerRadius: 8,
-      padding: 10,
-      boxPadding: 4,
-      titleFont: { weight: "bold" as const, size: 12 },
-      bodyFont: { size: 11 },
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 11 }, color: "#9ca3af" },
-    },
-    y: {
-      grid: { color: "#f0f0f0" },
-      ticks: { font: { size: 11 }, color: "#9ca3af" },
-    },
-  },
-};
+import { useChartOptions } from "@/lib/theme/chart-theme";
+import { useTranslation } from "@/lib/i18n/locale-provider";
+import { ReportFilters, DataSourceBanner, formatDateRangeLabel, type FilterState, type DataRange } from "@/components/layout/report-filters";
+import { ConfigurationBanner } from "@/components/layout/configuration-banner";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ── Component ── */
 
 export default function AgentsPage() {
+  const { commonOptions, doughnutOptions, legendPreset } = useChartOptions();
+  const { t } = useTranslation();
   const [data, setData] = useState<AgentData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState | null>(null);
+  const [dataRange, setDataRange] = useState<DataRange | null>(null);
+  const { ref: reportRef, ExportButton: PdfButton } = usePdfExport("copilot-agents");
 
   const fetchData = useCallback(async (filters: FilterState) => {
+    setAppliedFilters(filters);
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filters.startDate) params.set("start", filters.startDate);
       if (filters.endDate) params.set("end", filters.endDate);
       if (filters.userId) params.set("userId", filters.userId);
+      if (filters.orgId) params.set("orgId", filters.orgId);
       const res = await fetch(`/api/metrics/agents?${params}`);
       if (res.ok) setData(await res.json());
     } catch (err) {
@@ -244,14 +229,14 @@ export default function AgentsPage() {
 
   const lineOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
   });
 
   const barOpts = { ...commonOptions };
 
   const stackedBarOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
     scales: {
       ...commonOptions.scales,
       x: { ...commonOptions.scales.x, stacked: true },
@@ -261,22 +246,14 @@ export default function AgentsPage() {
 
   const stackedAreaOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
     scales: {
       ...commonOptions.scales,
       y: { ...commonOptions.scales.y, stacked: true },
     },
   });
 
-  const doughnutOpts = {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "55%",
-    plugins: {
-      legend: { position: "right" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 }, padding: 12 } },
-      tooltip: commonOptions.plugins.tooltip,
-    },
-  };
+  const doughnutOpts = doughnutOptions;
 
   const percentOpts = {
     ...commonOptions,
@@ -287,75 +264,92 @@ export default function AgentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div ref={reportRef} className="space-y-6">
+      <ConfigurationBanner />
       {/* Header + Filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">GitHub Copilot Agent Impact</h1>
-          <p className="text-sm text-gray-500">
-            Copilot Agent usage, adoption, and productivity impact
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t("agents.title")}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {t("agents.subtitle")}{appliedFilters ? ` — ${formatDateRangeLabel(appliedFilters.startDate, appliedFilters.endDate)}` : ""}
           </p>
         </div>
-        <ReportFilters onApply={fetchData} />
+        <div className="flex items-center gap-2">
+          <PdfButton />
+          <ReportFilters onApply={fetchData} onDataRange={setDataRange} />
+        </div>
       </div>
       <DataSourceBanner />
 
       {loading && !data ? (
-        <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading...</div>
+        <LoadingSpinner message={t("agents.loadingAgent")} />
+      ) : !data || data.agentUsersOverTime.length === 0 ? (
+        <EmptyState hasData={!!dataRange?.lastSyncAt} />
       ) : (
         <>
-          {/* KPI Cards */}
+          {/* KPI Cards — Overall Agent */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi label="Agent Users" value={kpi?.agentUsers ?? 0} sub={`of ${kpi?.activeUsers ?? 0} active`} />
-            <Kpi label="Adoption Rate" value={`${kpi?.agentAdoptionRate ?? 0}%`} sub="Active users using agent" />
-            <Kpi label="Acceptance Rate" value={`${kpi?.agentAcceptanceRate ?? 0}%`} sub="Code accepted from agent" />
-            <Kpi label="LOC Added" value={kpi?.agentLocAdded ?? 0} sub="By agent users" />
+            <Kpi label={t("agents.agentUsers")} value={kpi?.agentUsers ?? 0} sub={t("agents.ofActive", kpi?.activeUsers ?? 0)} />
+            <Kpi label={t("agents.adoptionRate")} value={`${kpi?.agentAdoptionRate ?? 0}%`} sub={t("agents.activeUsersUsingAgent")} />
+            <Kpi label={t("agents.acceptanceRate")} value={`${kpi?.agentAcceptanceRate ?? 0}%`} sub={t("agents.codeAcceptedFromAgent")} />
+            <Kpi label={t("agents.locAdded")} value={kpi?.agentLocAdded ?? 0} sub={t("agents.byAgentUsers")} />
           </div>
 
+          {/* IDE Agent vs GitHub Coding Agent */}
+          <Card title={t("agents.ideVsCodingAgent")} subtitle={t("agents.ideVsCodingAgentDesc")}>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Kpi label={t("agents.ideAgentUsers")} value={kpi?.ideAgentUsers ?? 0} sub={t("agents.inIdeAgent")} />
+              <Kpi label={t("agents.codingAgentUsers")} value={kpi?.codingAgentUsers ?? 0} sub={t("agents.cloudCodingAgent")} />
+              <Kpi label={t("agents.ideAgentInteractions")} value={kpi?.ideAgentInteractions ?? 0} sub={t("agents.ideAgentRequests")} />
+              <Kpi label={t("agents.codingAgentInteractions")} value={kpi?.codingAgentInteractions ?? 0} sub={t("agents.codingAgentRequests")} />
+            </div>
+          </Card>
+
           {/* Agent Users Over Time — Area chart with dual series */}
-          <Card title="Agent users over time" subtitle="Area chart — daily agent users vs total active users">
+          <Card title={t("agents.agentUsersOverTime")} subtitle={t("agents.agentUsersOverTimeDesc")}>
             {agentUsersChart && <div className="h-[300px]"><Line data={agentUsersChart} options={lineOpts(true)} /></div>}
           </Card>
 
           {/* Weekly Adoption Rate — Bar chart with % axis */}
-          <Card title="Weekly agent adoption rate" subtitle="Bar chart — % of active users using agent each week">
+          <Card title={t("agents.weeklyAgentAdoptionRate")} subtitle={t("agents.weeklyAgentAdoptionRateDesc")}>
             {weeklyAdoptionChart && <div className="h-[300px]"><Bar data={weeklyAdoptionChart} options={percentOpts} /></div>}
           </Card>
 
           {/* Agent Mode Requests & Model Usage */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="Agent mode requests over time" subtitle="Stacked area chart — daily breakdown by feature">
+            <Card title={t("agents.agentModeRequests")} subtitle={t("agents.agentModeRequestsDesc")}>
               {agentModeChart ? (
                 <div className="h-[300px]"><Line data={agentModeChart} options={stackedAreaOpts()} /></div>
               ) : (
                 <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">No data</div>
               )}
             </Card>
-            <Card title="Agent model usage" subtitle="Doughnut chart — model distribution in agent mode">
+            <Card title={t("agents.agentModelUsage")} subtitle={t("agents.agentModelUsageDesc")}>
               {agentModelDonut && <div className="h-[320px]"><Doughnut data={agentModelDonut} options={doughnutOpts} /></div>}
             </Card>
           </div>
 
           {/* Agent vs Non-Agent Code Generation — Stacked bar */}
-          <Card title="Agent vs non-agent code generation" subtitle="Stacked bar chart — daily code generation comparison">
+          <Card title={t("agents.agentVsNonAgent")} subtitle={t("agents.agentVsNonAgentDesc")}>
             {codeGenChart && <div className="h-[350px]"><Bar data={codeGenChart} options={stackedBarOpts()} /></div>}
           </Card>
 
           {/* Top Agent Users Table */}
-          <Card title="Top agent users" subtitle="Sortable table with pagination">
+          <Card title={t("agents.topAgentUsers")} subtitle={t("agents.topAgentUsersDesc")}>
             <DataTable
               columns={[
-                { key: "displayLabel", header: "User", render: (value: unknown) => <span className="font-medium text-gray-900">{String(value)}</span> },
-                { key: "daysActive", header: "Days Active", align: "right" },
-                { key: "totalInteractions", header: "Interactions", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "codeGenerated", header: "Code Generated", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "codeAccepted", header: "Code Accepted", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
-                { key: "locAdded", header: "LOC Added", align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "displayLabel", header: t("common.user"), render: (value: unknown) => <span className="font-medium text-gray-900 dark:text-gray-100">{String(value)}</span> },
+                { key: "daysActive", header: t("agents.daysActive"), align: "right" },
+                { key: "totalInteractions", header: t("agents.interactions"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "codeGenerated", header: t("agents.codeGenerated"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "codeAccepted", header: t("agents.codeAccepted"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
+                { key: "locAdded", header: t("agents.locAdded"), align: "right", render: (value: unknown) => Number(value).toLocaleString() },
               ]}
               data={(data?.topAgentUsers ?? []) as unknown as Record<string, unknown>[]}
-              emptyMessage="No agent users found"
-              searchPlaceholder="Search users..."
+              emptyMessage={t("common.noResults")}
+              searchPlaceholder={t("agents.searchUsers")}
               pageSize={25}
+              defaultSortKey="displayLabel"
             />
           </Card>
         </>
@@ -368,10 +362,10 @@ export default function AgentsPage() {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -380,12 +374,12 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 function Kpi({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{sub}</p>}
     </div>
   );
 }

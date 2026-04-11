@@ -13,6 +13,7 @@ import { daysAgo, isValidDate } from "@/lib/utils";
 import { z } from "zod";
 import { getGitHubConfig } from "@/lib/db/settings";
 import { resolveDisplayNames, formatUserLabel } from "@/lib/github/resolve-display-names";
+import { safeErrorMessage } from "@/lib/auth";
 
 const querySchema = z.object({
   days: z.coerce.number().int().positive().optional(),
@@ -20,19 +21,26 @@ const querySchema = z.object({
   end: z.string().refine(isValidDate).optional(),
   userId: z.coerce.number().int().optional(),
   teamName: z.string().optional(),
-  orgId: z.coerce.number().int().optional(),
+  orgId: z.string().optional(),
 });
+
+function parseOrgIds(orgId?: string): number[] {
+  if (!orgId) return [];
+  return orgId.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+}
 
 async function resolveUserFilter(params: {
   userId?: number;
   teamName?: string;
-  orgId?: number;
+  orgId?: string;
 }): Promise<number[] | null> {
   if (params.userId) return [params.userId];
-  if (params.teamName || params.orgId) {
+  const orgIds = parseOrgIds(params.orgId);
+  if (params.teamName || orgIds.length > 0) {
     const conditions = [eq(dimUser.isCurrent, true)];
     if (params.teamName) conditions.push(eq(dimUser.teamName, params.teamName));
-    if (params.orgId) conditions.push(eq(dimUser.orgId, params.orgId));
+    if (orgIds.length === 1) conditions.push(eq(dimUser.orgId, orgIds[0]));
+    else if (orgIds.length > 1) conditions.push(inArray(dimUser.orgId, orgIds));
     const users = await db
       .select({ userId: dimUser.userId })
       .from(dimUser)
@@ -95,7 +103,7 @@ export async function GET(request: NextRequest) {
       agentVsNonAgentCodeGen,
       weeklyAgentAdoption,
     ] = await Promise.all([
-      // 1. KPI: total active, agent users, chat users, agent interactions
+      // 1. KPI: total active, agent users, chat users, agent interactions, IDE vs Coding Agent
       db
         .select({
           activeUsers: sql<number>`COUNT(DISTINCT ${factCopilotUsageDaily.userId})`,
@@ -106,6 +114,10 @@ export async function GET(request: NextRequest) {
           agentCodeAccept: sql<number>`COALESCE(SUM(${factCopilotUsageDaily.codeAcceptanceActivityCount}) FILTER (WHERE ${factCopilotUsageDaily.usedAgent} = true), 0)`,
           totalCodeGen: sql<number>`COALESCE(SUM(${factCopilotUsageDaily.codeGenerationActivityCount}), 0)`,
           totalLocAdded: sql<number>`COALESCE(SUM(${factCopilotUsageDaily.locAddedSum}) FILTER (WHERE ${factCopilotUsageDaily.usedAgent} = true), 0)`,
+          ideAgentUsers: sql<number>`COUNT(DISTINCT ${factCopilotUsageDaily.userId}) FILTER (WHERE ${factCopilotUsageDaily.usedAgent} = true AND ${factCopilotUsageDaily.usedCopilotCodingAgent} = false)`,
+          codingAgentUsers: sql<number>`COUNT(DISTINCT ${factCopilotUsageDaily.userId}) FILTER (WHERE ${factCopilotUsageDaily.usedCopilotCodingAgent} = true)`,
+          ideAgentInteractions: sql<number>`COALESCE(SUM(${factCopilotUsageDaily.userInitiatedInteractionCount}) FILTER (WHERE ${factCopilotUsageDaily.usedAgent} = true AND ${factCopilotUsageDaily.usedCopilotCodingAgent} = false), 0)`,
+          codingAgentInteractions: sql<number>`COALESCE(SUM(${factCopilotUsageDaily.userInitiatedInteractionCount}) FILTER (WHERE ${factCopilotUsageDaily.usedCopilotCodingAgent} = true), 0)`,
         })
         .from(factCopilotUsageDaily)
         .where(mainWhere()),
@@ -215,6 +227,7 @@ export async function GET(request: NextRequest) {
         .where(mainWhere())
         .groupBy(sql`DATE_TRUNC('week', ${factCopilotUsageDaily.day}::date)`)
         .orderBy(sql`DATE_TRUNC('week', ${factCopilotUsageDaily.day}::date)`),
+
     ]);
 
     const kpi = kpiResult[0];
@@ -277,6 +290,10 @@ export async function GET(request: NextRequest) {
           : 0,
         totalCodeGen: kpi.totalCodeGen,
         agentLocAdded: kpi.totalLocAdded,
+        ideAgentUsers: kpi.ideAgentUsers,
+        codingAgentUsers: kpi.codingAgentUsers,
+        ideAgentInteractions: kpi.ideAgentInteractions,
+        codingAgentInteractions: kpi.codingAgentInteractions,
       },
       agentUsersOverTime,
       agentModeByDay: agentModePivoted,
@@ -286,9 +303,8 @@ export async function GET(request: NextRequest) {
       topAgentUsers: topAgentUsersWithNames,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Agent Metrics API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Agent Metrics API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }
 

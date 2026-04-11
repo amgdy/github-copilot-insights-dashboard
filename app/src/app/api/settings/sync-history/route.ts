@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ingestionLog } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,7 @@ export async function GET() {
 
     return NextResponse.json({ history: rows });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to fetch sync history";
-    console.error("Sync history API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Sync history API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to fetch sync history") }, { status: 500 });
   }
 }

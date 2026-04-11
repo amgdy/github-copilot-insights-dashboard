@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { dimModel, factUserModelDaily, dimFeature } from "@/lib/db/schema";
 import { sql, and, gte, lte, eq, desc } from "drizzle-orm";
 import { daysAgo } from "@/lib/utils";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -107,9 +108,7 @@ export async function GET(request: NextRequest) {
       models,
     });
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to fetch models data";
-    console.error("Models API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Models API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to fetch models data") }, { status: 500 });
   }
 }

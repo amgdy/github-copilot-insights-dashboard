@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { factCopilotUsageDaily, ingestionLog } from "@/lib/db/schema";
 import { sql, eq, desc } from "drizzle-orm";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +40,7 @@ export async function GET() {
       lastSyncSource: sync?.source ?? null,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Data range API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Data range API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }
