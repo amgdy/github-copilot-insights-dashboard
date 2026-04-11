@@ -150,8 +150,11 @@ Open [http://localhost:3000](http://localhost:3000) and navigate to **Settings**
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `ADMIN_PASSWORD` | Yes | Password for Settings page access (min 8 chars) |
+| `DATABASE_URL` | Yes | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`) |
+| `ADMIN_PASSWORD` | No | Password for Settings page access. If unset, settings are open to all |
+| `DASHBOARD_PASSWORD` | No | Password gate for all dashboard pages. If unset, dashboards are open to all |
+| `NEXT_PUBLIC_BUILD_ID` | No | Git commit SHA shown in sidebar footer (auto-set in Docker) |
+| `NEXT_PUBLIC_BUILD_TIME` | No | Build timestamp shown in sidebar footer (auto-set in Docker) |
 
 The **GitHub token**, **Enterprise slug**, and **sync interval** are configured via the Settings UI and stored in the database.
 
