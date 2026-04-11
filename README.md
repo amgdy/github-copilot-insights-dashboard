@@ -151,11 +151,13 @@ Open [http://localhost:3000](http://localhost:3000) and navigate to **Settings**
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string (e.g. `postgresql://user:pass@host:5432/db`) |
-| `ADMIN_PASSWORD` | No | Password for Settings page access. If unset, settings are open to all |
-| `DASHBOARD_PASSWORD` | No | Password gate for all dashboard pages. If unset, dashboards are open to all |
+| `ADMIN_PASSWORD` | No | Password for Settings page access. If unset, settings are open to all. Only leave this unset for local development on a trusted machine |
+| `DASHBOARD_PASSWORD` | No | Password gate for all dashboard pages. If unset, dashboards are open to all. Only leave this unset for local development or intentionally public dashboards |
 | `NEXT_PUBLIC_BUILD_ID` | No | Git commit SHA shown in sidebar footer (auto-set in Docker) |
 | `NEXT_PUBLIC_BUILD_TIME` | No | Build timestamp shown in sidebar footer (auto-set in Docker) |
 
+> [!WARNING]
+> For any non-local deployment, set `ADMIN_PASSWORD` to protect the **Settings** page. The Settings UI can configure the GitHub token, Enterprise slug, and sync interval. If dashboard pages should not be publicly accessible, also set `DASHBOARD_PASSWORD`. Leaving these unset is only recommended for local development on a trusted machine.
 The **GitHub token**, **Enterprise slug**, and **sync interval** are configured via the Settings UI and stored in the database.
 
 ## Deploy to Azure
