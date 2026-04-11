@@ -33,6 +33,12 @@ Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing
 
 ## Screenshots
 
+### Landing Page
+
+Welcome page with feature overview cards and quick navigation to all dashboards.
+
+![Landing Page](docs/screenshots/landing.png)
+
 ### Copilot Usage
 
 Daily and weekly active users, code completions, chat requests, and model usage trends.
@@ -44,6 +50,18 @@ Daily and weekly active users, code completions, chat requests, and model usage 
 Lines of code added and deleted across modes, models, and languages.
 
 ![Code Generation](docs/screenshots/code-generation.png)
+
+### PR & Autofix
+
+AI-assisted pull request creation, Copilot code review suggestions, and autofix analytics.
+
+![PR & Autofix](docs/screenshots/pr-autofix.png)
+
+### Agent Impact
+
+Agent adoption rate, IDE Agent vs GitHub Coding Agent breakdown, and top agent users.
+
+![Agent Impact](docs/screenshots/agent-impact.png)
 
 ### CLI Impact
 
@@ -62,6 +80,18 @@ License utilization, seat costs, and savings opportunities — live from GitHub 
 Premium model request consumption, quota allocation, and per-user breakdown.
 
 ![Premium Requests](docs/screenshots/premium-requests.png)
+
+### Users
+
+Individual user activity explorer with license status, engagement metrics, and feature adoption.
+
+![Users](docs/screenshots/users.png)
+
+### Metrics Reference
+
+200+ metric definitions with calculation formulas, data sources, and usage guidance.
+
+![Metrics Reference](docs/screenshots/metrics-reference.png)
 
 ### Settings — Configuration
 
