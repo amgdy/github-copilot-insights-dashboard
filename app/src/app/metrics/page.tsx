@@ -15,6 +15,8 @@ import {
   Title,
 } from "chart.js";
 import { Line, Bar, Doughnut } from "react-chartjs-2";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePdfExport } from "@/components/ui/pdf-export";
 
 ChartJS.register(
   CategoryScale,
@@ -35,6 +37,7 @@ interface DashboardData {
   period: { start: string; end: string };
   kpis: {
     activeUsers: number;
+    totalCopilotUsers: number;
     agentUsers: number;
     agentAdoptionRate: number;
     chatUsers: number;
@@ -96,53 +99,39 @@ function topN(data: Array<{ name: string; value: number | string }>, n = 10) {
   return top;
 }
 
-import { ReportFilters, DataSourceBanner, type FilterState } from "@/components/layout/report-filters";
-
-/* ── Shared Chart Options ── */
-
-const commonOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "#fff",
-      titleColor: "#111827",
-      bodyColor: "#374151",
-      borderColor: "#e5e7eb",
-      borderWidth: 1,
-      cornerRadius: 8,
-      padding: 10,
-      boxPadding: 4,
-      titleFont: { weight: "bold" as const, size: 12 },
-      bodyFont: { size: 11 },
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 11 }, color: "#9ca3af" },
-    },
-    y: {
-      grid: { color: "#f0f0f0" },
-      ticks: { font: { size: 11 }, color: "#9ca3af" },
-    },
-  },
-};
+import { ReportFilters, DataSourceBanner, formatDateRangeLabel, type FilterState, type DataRange } from "@/components/layout/report-filters";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { useChartOptions } from "@/lib/theme/chart-theme";
+import { useTranslation } from "@/lib/i18n/locale-provider";
+import { ConfigurationBanner } from "@/components/layout/configuration-banner";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ── Component ── */
 
 export default function CopilotUsagePage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState | null>(null);
+  const [dataRange, setDataRange] = useState<DataRange | null>(null);
+  const { ref: reportRef, ExportButton: PdfButton } = usePdfExport("copilot-usage");
+  const { commonOptions, doughnutOptions: baseDoughnutOptions, legendPreset } = useChartOptions();
+  const { t } = useTranslation();
+
+  // Multi-select chart filters
+  const [modelPerDayFilter, setModelPerDayFilter] = useState<string[]>([]);
+  const [modelPerChatModeFilter, setModelPerChatModeFilter] = useState<string[]>([]);
+  const [modelPerLangModelFilter, setModelPerLangModelFilter] = useState<string[]>([]);
+  const [modelPerLangLangFilter, setModelPerLangLangFilter] = useState<string[]>([]);
 
   const fetchData = useCallback(async (filters: FilterState) => {
+    setAppliedFilters(filters);
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filters.startDate) params.set("start", filters.startDate);
       if (filters.endDate) params.set("end", filters.endDate);
       if (filters.userId) params.set("userId", filters.userId);
+      if (filters.orgId) params.set("orgId", filters.orgId);
       const res = await fetch(`/api/metrics/dashboard?${params}`);
       if (res.ok) setData(await res.json());
     } catch (err) {
@@ -263,16 +252,23 @@ export default function CopilotUsagePage() {
 
   const modelPerDayChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.modelUsagePerDay).sort();
+    const allKeys = extractDimKeys(data.modelUsagePerDay).sort();
+    const keys = modelPerDayFilter.length > 0 ? allKeys.filter((k) => modelPerDayFilter.includes(k)) : allKeys;
     return {
       labels: data.modelUsagePerDay.map((r) => fmtDate(String(r.date))),
       datasets: keys.map((k, i) => ({
         label: k,
         data: data.modelUsagePerDay.map((r) => Number(r[k]) || 0),
-        backgroundColor: COLORS[i % COLORS.length],
+        backgroundColor: COLORS[allKeys.indexOf(k) % COLORS.length],
         fill: true,
       })),
     };
+  }, [data, modelPerDayFilter]);
+
+  // Available model names for the per-day filter
+  const modelPerDayOptions = useMemo(() => {
+    if (!data) return [];
+    return extractDimKeys(data.modelUsagePerDay).sort();
   }, [data]);
 
   const chatModelDonut = useMemo(() => {
@@ -290,15 +286,22 @@ export default function CopilotUsagePage() {
 
   const modelPerChatModeChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.modelUsagePerChatMode).sort();
+    const allKeys = extractDimKeys(data.modelUsagePerChatMode).sort();
+    const keys = modelPerChatModeFilter.length > 0 ? allKeys.filter((k) => modelPerChatModeFilter.includes(k)) : allKeys;
     return {
       labels: data.modelUsagePerChatMode.map((r) => String(r.name)),
       datasets: keys.map((k, i) => ({
         label: k,
         data: data.modelUsagePerChatMode.map((r) => Number(r[k]) || 0),
-        backgroundColor: COLORS[i % COLORS.length],
+        backgroundColor: COLORS[allKeys.indexOf(k) % COLORS.length],
       })),
     };
+  }, [data, modelPerChatModeFilter]);
+
+  // Available model names for the per-chat-mode filter
+  const modelPerChatModeOptions = useMemo(() => {
+    if (!data) return [];
+    return extractDimKeys(data.modelUsagePerChatMode).sort();
   }, [data]);
 
   const langPerDayChart = useMemo(() => {
@@ -330,27 +333,46 @@ export default function CopilotUsagePage() {
 
   const modelPerLangChart = useMemo(() => {
     if (!data) return null;
-    const keys = extractDimKeys(data.modelUsagePerLanguage).sort();
+    const allModelKeys = extractDimKeys(data.modelUsagePerLanguage).sort();
+    const modelKeys = modelPerLangModelFilter.length > 0
+      ? allModelKeys.filter((k) => modelPerLangModelFilter.includes(k))
+      : allModelKeys;
+    // Filter languages (rows) if language filter is applied
+    const allLangs = data.modelUsagePerLanguage.map((r) => String(r.name));
+    const filteredData = modelPerLangLangFilter.length > 0
+      ? data.modelUsagePerLanguage.filter((r) => modelPerLangLangFilter.includes(String(r.name)))
+      : data.modelUsagePerLanguage;
     return {
-      labels: data.modelUsagePerLanguage.map((r) => String(r.name)),
-      datasets: keys.map((k, i) => ({
+      labels: filteredData.map((r) => String(r.name)),
+      datasets: modelKeys.map((k, i) => ({
         label: k,
-        data: data.modelUsagePerLanguage.map((r) => Number(r[k]) || 0),
-        backgroundColor: COLORS[i % COLORS.length],
+        data: filteredData.map((r) => Number(r[k]) || 0),
+        backgroundColor: COLORS[allModelKeys.indexOf(k) % COLORS.length],
       })),
     };
+  }, [data, modelPerLangModelFilter, modelPerLangLangFilter]);
+
+  // Available options for the model-per-language filters
+  const modelPerLangModelOptions = useMemo(() => {
+    if (!data) return [];
+    return extractDimKeys(data.modelUsagePerLanguage).sort();
+  }, [data]);
+
+  const modelPerLangLangOptions = useMemo(() => {
+    if (!data) return [];
+    return data.modelUsagePerLanguage.map((r) => String(r.name)).sort();
   }, [data]);
 
   /* ── Reusable chart option presets ── */
 
   const lineOpts = (showLegend = false) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
   });
 
   const stackedBarOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
     scales: {
       ...commonOptions.scales,
       x: { ...commonOptions.scales.x, stacked: true },
@@ -361,26 +383,18 @@ export default function CopilotUsagePage() {
   const horizontalStackedOpts = (showLegend = true) => ({
     ...commonOptions,
     indexAxis: "y" as const,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
     scales: {
       x: { ...commonOptions.scales.y, stacked: true },
       y: { ...commonOptions.scales.x, stacked: true },
     },
   });
 
-  const doughnutOpts = {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "55%",
-    plugins: {
-      legend: { position: "right" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 }, padding: 12 } },
-      tooltip: commonOptions.plugins.tooltip,
-    },
-  };
+  const doughnutOpts = baseDoughnutOptions;
 
   const stackedAreaOpts = (showLegend = true) => ({
     ...commonOptions,
-    plugins: { ...commonOptions.plugins, legend: { display: showLegend, position: "top" as const, labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } } } },
+    plugins: { ...commonOptions.plugins, legend: { ...legendPreset, display: showLegend } },
     scales: {
       ...commonOptions.scales,
       x: { ...commonOptions.scales.x },
@@ -389,73 +403,99 @@ export default function CopilotUsagePage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div ref={reportRef} className="space-y-6">
+      <ConfigurationBanner />
       {/* Header + Filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">GitHub Copilot Usage</h1>
-          <p className="text-sm text-gray-500">
-            Usage metrics, adoption trends, and model analytics
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t("dashboard.title")}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+{t("dashboard.subtitle")}{appliedFilters ? ` — ${formatDateRangeLabel(appliedFilters.startDate, appliedFilters.endDate)}` : ""}
           </p>
         </div>
-        <ReportFilters onApply={fetchData} />
+        <div className="flex items-center gap-2">
+          <PdfButton />
+          <ReportFilters onApply={fetchData} onDataRange={setDataRange} />
+        </div>
       </div>
       <DataSourceBanner />
 
       {loading && !data ? (
-        <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading...</div>
+        <LoadingSpinner message={t("dashboard.loadingMetrics")} />
+      ) : !data || data.dailyActiveUsers.length === 0 ? (
+        <EmptyState hasData={!!dataRange?.lastSyncAt} />
       ) : (
         <>
           {/* KPI Cards */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            <Kpi label="Active Users" value={kpi?.activeUsers ?? 0} />
-            <Kpi label="Agent Adoption" value={`${kpi?.agentAdoptionRate ?? 0}%`} />
-            <Kpi label="Total Interactions" value={kpi?.totalInteractions ?? 0} />
-            <Kpi label="Code Accepted" value={kpi?.totalCodeAccept ?? 0} />
-            <Kpi label="Top Model" value={kpi?.mostUsedChatModel ?? "N/A"} small />
+            <Kpi label={t("dashboard.activeUsers")} value={kpi?.activeUsers ?? 0} sub={t("dashboard.ofTotal", kpi?.totalCopilotUsers ?? 0)} />
+            <Kpi label={t("dashboard.agentAdoption")} value={`${kpi?.agentAdoptionRate ?? 0}%`} />
+            <Kpi label={t("dashboard.totalInteractions")} value={kpi?.totalInteractions ?? 0} />
+            <Kpi label={t("dashboard.codeAccepted")} value={kpi?.totalCodeAccept ?? 0} />
+            <Kpi label={t("dashboard.topModel")} value={kpi?.mostUsedChatModel ?? "N/A"} small />
           </div>
 
           {/* Daily + Weekly Active Users */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="Daily active users" subtitle="Area chart — daily unique Copilot users">
+            <Card title={t("dashboard.dailyActiveUsers")} subtitle={t("dashboard.dailyActiveUsersDesc")}>
               {dailyActiveChart && <div className="h-[300px]"><Line data={dailyActiveChart} options={lineOpts()} /></div>}
             </Card>
-            <Card title="Weekly active users" subtitle="Bar chart — weekly unique Copilot users">
+            <Card title={t("dashboard.weeklyActiveUsers")} subtitle={t("dashboard.weeklyActiveUsersDesc")}>
               {weeklyActiveChart && <div className="h-[300px]"><Bar data={weeklyActiveChart} options={{ ...commonOptions }} /></div>}
             </Card>
           </div>
 
           {/* Average Chat Requests */}
-          <Card title="Average chat requests per active user" subtitle="Area chart — daily average excluding code completions">
+          <Card title={t("dashboard.avgChatRequests")} subtitle={t("dashboard.avgChatRequestsDesc")}>
             {avgChatChart && <div className="h-[300px]"><Line data={avgChatChart} options={lineOpts()} /></div>}
           </Card>
 
           {/* Requests per Chat Mode */}
-          <Card title="Requests per chat mode" subtitle="Stacked bar chart — user-initiated requests by mode">
+          <Card title={t("dashboard.requestsPerChatMode")} subtitle={t("dashboard.requestsPerChatModeDesc")}>
             {chatModeChart && <div className="h-[350px]"><Bar data={chatModeChart} options={stackedBarOpts()} /></div>}
           </Card>
 
           {/* Code Completions */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="Code completions" subtitle="Area chart — suggested vs accepted completions">
+            <Card title={t("dashboard.codeCompletions")} subtitle={t("dashboard.codeCompletionsDesc")}>
               {codeCompChart && <div className="h-[300px]"><Line data={codeCompChart} options={lineOpts(true)} /></div>}
             </Card>
-            <Card title="Acceptance rate" subtitle="Area chart — % of suggested completions accepted">
+            <Card title={t("dashboard.acceptanceRate")} subtitle={t("dashboard.acceptanceRateDesc")}>
               {acceptanceRateChart && <div className="h-[300px]"><Line data={acceptanceRateChart} options={lineOpts()} /></div>}
             </Card>
           </div>
 
           {/* Model Usage per Day */}
-          <Card title="Model usage per day" subtitle="Stacked area chart — daily model breakdown">
+          <Card title={t("dashboard.modelUsagePerDay")} subtitle={t("dashboard.modelUsagePerDayDesc")}
+            headerRight={
+              <MultiSelect
+                options={modelPerDayOptions}
+                selected={modelPerDayFilter}
+                onChange={setModelPerDayFilter}
+                placeholder={t("dashboard.allModels")}
+                label={t("dashboard.models")}
+              />
+            }
+          >
             {modelPerDayChart && <div className="h-[350px]"><Line data={modelPerDayChart} options={stackedAreaOpts()} /></div>}
           </Card>
 
           {/* Chat Model Usage + Model per Chat Mode */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="Chat model usage" subtitle="Doughnut chart — model distribution">
+            <Card title={t("dashboard.chatModelUsage")} subtitle={t("dashboard.chatModelUsageDesc")}>
               {chatModelDonut && <div className="h-[320px]"><Doughnut data={chatModelDonut} options={doughnutOpts} /></div>}
             </Card>
-            <Card title="Model usage per chat mode" subtitle="Horizontal stacked bar — models by feature">
+            <Card title={t("dashboard.modelUsagePerChatMode")} subtitle={t("dashboard.modelUsagePerChatModeDesc")}
+              headerRight={
+                <MultiSelect
+                  options={modelPerChatModeOptions}
+                  selected={modelPerChatModeFilter}
+                  onChange={setModelPerChatModeFilter}
+                  placeholder={t("dashboard.allModels")}
+                  label={t("dashboard.models")}
+                />
+              }
+            >
               {modelPerChatModeChart && (
                 <div className="h-[320px]"><Bar data={modelPerChatModeChart} options={horizontalStackedOpts()} /></div>
               )}
@@ -463,16 +503,35 @@ export default function CopilotUsagePage() {
           </div>
 
           {/* Language Usage per Day */}
-          <Card title="Language usage per day" subtitle="Stacked area chart — daily language breakdown">
+          <Card title={t("dashboard.languageUsagePerDay")} subtitle={t("dashboard.languageUsagePerDayDesc")}>
             {langPerDayChart && <div className="h-[350px]"><Line data={langPerDayChart} options={stackedAreaOpts()} /></div>}
           </Card>
 
           {/* Language Usage + Model per Language */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card title="Language usage" subtitle="Doughnut chart — language distribution">
+            <Card title={t("dashboard.languageUsage")} subtitle={t("dashboard.languageUsageDesc")}>
               {langDonut && <div className="h-[320px]"><Doughnut data={langDonut} options={doughnutOpts} /></div>}
             </Card>
-            <Card title="Model usage per language" subtitle="Horizontal stacked bar — models by language">
+            <Card title={t("dashboard.modelUsagePerLanguage")} subtitle={t("dashboard.modelUsagePerLanguageDesc")}
+              headerRight={
+                <div className="flex flex-wrap gap-2">
+                  <MultiSelect
+                    options={modelPerLangModelOptions}
+                    selected={modelPerLangModelFilter}
+                    onChange={setModelPerLangModelFilter}
+                    placeholder={t("dashboard.allModels")}
+                    label={t("dashboard.models")}
+                  />
+                  <MultiSelect
+                    options={modelPerLangLangOptions}
+                    selected={modelPerLangLangFilter}
+                    onChange={setModelPerLangLangFilter}
+                    placeholder={t("dashboard.allLanguages")}
+                    label={t("dashboard.languages")}
+                  />
+                </div>
+              }
+            >
               {modelPerLangChart && (
                 <div className="h-[320px]"><Bar data={modelPerLangChart} options={horizontalStackedOpts()} /></div>
               )}
@@ -486,25 +545,29 @@ export default function CopilotUsagePage() {
 
 /* ── Sub-components ── */
 
-function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function Card({ title, subtitle, headerRight, children }: { title: string; subtitle?: string; headerRight?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+          {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
+        </div>
+        {headerRight && <div>{headerRight}</div>}
       </div>
       <div className="p-4">{children}</div>
     </div>
   );
 }
 
-function Kpi({ label, value, small }: { label: string; value: string | number; small?: boolean }) {
+function Kpi({ label, value, small, sub }: { label: string; value: string | number; small?: boolean; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`mt-1 font-bold text-gray-900 ${small ? "text-base" : "text-2xl"}`}>
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`mt-1 font-bold text-gray-900 dark:text-gray-100 ${small ? "text-base" : "text-2xl"}`}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
+      {sub && <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{sub}</p>}
     </div>
   );
 }

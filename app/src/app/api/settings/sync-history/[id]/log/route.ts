@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { ingestionLog } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { safeErrorMessage } from "@/lib/auth";
 
 const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -20,12 +21,16 @@ export async function GET(
         id: ingestionLog.id,
         ingestionDate: ingestionLog.ingestionDate,
         source: ingestionLog.source,
+        scope: ingestionLog.scope,
+        scopeDetail: ingestionLog.scopeDetail,
         startedAt: ingestionLog.startedAt,
         completedAt: ingestionLog.completedAt,
         status: ingestionLog.status,
         recordsFetched: ingestionLog.recordsFetched,
         recordsInserted: ingestionLog.recordsInserted,
         recordsSkipped: ingestionLog.recordsSkipped,
+        aggregateRecords: ingestionLog.aggregateRecords,
+        orgsDiscovered: ingestionLog.orgsDiscovered,
         errorMessage: ingestionLog.errorMessage,
         apiRequests: ingestionLog.apiRequests,
         logMessages: ingestionLog.logMessages,
@@ -45,13 +50,17 @@ export async function GET(
       `=== Ingestion Log #${entry.id} ===`,
       `Date:      ${entry.ingestionDate}`,
       `Source:    ${entry.source}`,
+      `Scope:     ${entry.scope ?? "N/A"}`,
+      `Detail:    ${entry.scopeDetail ?? "N/A"}`,
       `Status:    ${entry.status}`,
       `Started:   ${entry.startedAt ? new Date(entry.startedAt).toISOString() : "N/A"}`,
       `Completed: ${entry.completedAt ? new Date(entry.completedAt).toISOString() : "In progress"}`,
-      `Records Fetched:  ${entry.recordsFetched ?? 0}`,
-      `Records Inserted: ${entry.recordsInserted ?? 0}`,
-      `Records Skipped:  ${entry.recordsSkipped ?? 0}`,
-      `API Requests:     ${entry.apiRequests ?? 0}`,
+      `Records Fetched:    ${entry.recordsFetched ?? 0}`,
+      `Records Inserted:   ${entry.recordsInserted ?? 0}`,
+      `Records Skipped:    ${entry.recordsSkipped ?? 0}`,
+      `Aggregate Records:  ${entry.aggregateRecords ?? 0}`,
+      `Organizations:      ${entry.orgsDiscovered ?? 0}`,
+      `API Requests:       ${entry.apiRequests ?? 0}`,
     ];
 
     if (entry.errorMessage) {
@@ -77,8 +86,7 @@ export async function GET(
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid log ID" }, { status: 400 });
     }
-    const message = err instanceof Error ? err.message : "Failed to fetch ingestion log";
-    console.error("Ingestion log download error:", message);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    console.error("Ingestion log download error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to fetch ingestion log") }, { status: 500 });
   }
 }

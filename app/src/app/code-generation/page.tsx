@@ -11,6 +11,10 @@ import {
   Legend,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePdfExport } from "@/components/ui/pdf-export";
+import { useChartOptions } from "@/lib/theme/chart-theme";
+import { useTranslation } from "@/lib/i18n/locale-provider";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Filler, Tooltip, Legend);
 
@@ -32,7 +36,9 @@ interface CodeGenData {
   agentInitiatedByLanguage: Array<{ language: string; added: number; deleted: number }>;
 }
 
-import { ReportFilters, DataSourceBanner, type FilterState } from "@/components/layout/report-filters";
+import { ReportFilters, DataSourceBanner, formatDateRangeLabel, type FilterState, type DataRange } from "@/components/layout/report-filters";
+import { ConfigurationBanner } from "@/components/layout/configuration-banner";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ── Helpers ── */
 
@@ -56,58 +62,54 @@ const COLOR = {
 
 /* ── Shared Chart Options ── */
 
-const commonTooltip = {
-  backgroundColor: "#fff",
-  titleColor: "#111827",
-  bodyColor: "#374151",
-  borderColor: "#e5e7eb",
-  borderWidth: 1,
-  cornerRadius: 8,
-  padding: 10,
-  boxPadding: 4,
-  titleFont: { weight: "bold" as const, size: 12 },
-  bodyFont: { size: 11 },
-};
+// commonTooltip moved to component via useChartOptions
 
-const barOpts = (stacked = false, showLegend = true): object => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: showLegend,
-      position: "top" as const,
-      labels: { usePointStyle: true, pointStyle: "rect" as const, font: { size: 11 }, padding: 12 },
-    },
-    tooltip: commonTooltip,
-  },
-  scales: {
-    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#9ca3af" }, stacked },
-    y: {
-      grid: { color: "#f0f0f0" },
-      ticks: {
-        font: { size: 11 },
-        color: "#9ca3af",
-        callback: (v: number | string) => fmtNumber(Number(v)),
-      },
-      stacked,
-      title: { display: true, text: "Lines of code", font: { size: 11 }, color: "#9ca3af" },
-    },
-  },
-});
+// barOpts moved to component via useChartOptions
 
 /* ── Component ── */
 
 export default function CodeGenerationPage() {
+  const { commonOptions, isDark } = useChartOptions();
+  const { t } = useTranslation();
+  const commonTooltip = commonOptions.plugins.tooltip;
+  const barOpts = (stacked = false, showLegend = true): object => ({
+    ...commonOptions,
+    plugins: {
+      legend: {
+        display: showLegend,
+        position: "top" as const,
+        labels: { usePointStyle: true, pointStyle: "rect" as const, font: { size: 11 }, padding: 12, color: isDark ? "#cbd5e1" : undefined },
+      },
+      tooltip: commonTooltip,
+    },
+    scales: {
+      x: { ...commonOptions.scales.x, stacked },
+      y: {
+        ...commonOptions.scales.y,
+        stacked,
+        ticks: {
+          ...commonOptions.scales.y.ticks,
+          callback: (v: number | string) => fmtNumber(Number(v)),
+        },
+        title: { display: true, text: "Lines of code", font: { size: 11 }, color: isDark ? "#94a3b8" : "#9ca3af" },
+      },
+    },
+  });
   const [data, setData] = useState<CodeGenData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState | null>(null);
+  const [dataRange, setDataRange] = useState<DataRange | null>(null);
+  const { ref: reportRef, ExportButton: PdfButton } = usePdfExport("ide-code-generation");
 
   const fetchData = useCallback(async (filters: FilterState) => {
+    setAppliedFilters(filters);
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filters.startDate) params.set("start", filters.startDate);
       if (filters.endDate) params.set("end", filters.endDate);
       if (filters.userId) params.set("userId", filters.userId);
+      if (filters.orgId) params.set("orgId", filters.orgId);
       const res = await fetch(`/api/metrics/code-generation?${params}`);
       if (res.ok) setData(await res.json());
     } catch (err) {
@@ -273,37 +275,41 @@ export default function CodeGenerationPage() {
   }, [data]);
 
   return (
-    <div className="space-y-6">
+    <div ref={reportRef} className="space-y-6">
+      <ConfigurationBanner />
       {/* ── Header + Filters ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">IDE Code Generation</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t("codeGen.title")}</h1>
           <p className="text-sm text-gray-500">
-            Lines of code added and deleted from the codebase across all modes
+            {t("codeGen.subtitle")}{appliedFilters ? ` — ${formatDateRangeLabel(appliedFilters.startDate, appliedFilters.endDate)}` : ""}
           </p>
         </div>
-        <ReportFilters onApply={fetchData} />
+        <div className="flex items-center gap-2">
+          <PdfButton />
+          <ReportFilters onApply={fetchData} onDataRange={setDataRange} />
+        </div>
       </div>
       <DataSourceBanner />
 
       {loading && !data ? (
-        <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading...</div>
-      ) : data ? (
+        <LoadingSpinner message={t("codeGen.loadingCodeGen")} />
+      ) : data && data.dailyTotals.length > 0 ? (
         <>
           {/* ── KPI Cards ── */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Kpi
-              label="Lines of code changed with AI"
+              label={t("codeGen.linesChangedWithAI")}
               value={fmtNumber(data.kpis.totalLocChanged)}
-              sub={`Lines of code added and deleted across all modes in the last ${data.period.days} days`}
+              sub={`Lines of code added and deleted across all modes — ${formatDateRangeLabel(data.period.start, data.period.end)}`}
             />
             <Kpi
-              label="Agent Contribution"
+              label={t("codeGen.agentContribution")}
               value={`${data.kpis.agentContribution}%`}
-              sub={`Percentage of lines of code added and deleted by agents in the last ${data.period.days} days`}
+              sub={`Percentage of lines of code added and deleted by agents — ${formatDateRangeLabel(data.period.start, data.period.end)}`}
             />
             <Kpi
-              label="Average lines deleted by agent"
+              label={t("codeGen.avgLinesDeletedByAgent")}
               value={fmtNumber(data.kpis.avgLinesDeletedByAgent)}
               sub="Average lines of code deleted by agents on behalf of active users in the current calendar month"
             />
@@ -311,8 +317,8 @@ export default function CodeGenerationPage() {
 
           {/* ── Daily Total ── */}
           <Card
-            title="Daily total of lines added and deleted"
-            subtitle="Total lines of code added to and deleted from the codebase across all modes"
+            title={t("codeGen.dailyTotalTitle")}
+            subtitle={t("codeGen.dailyTotalSubtitle")}
           >
             {dailyChart && (
               <div className="h-[320px]">
@@ -324,8 +330,8 @@ export default function CodeGenerationPage() {
           {/* ── User vs Agent by Feature ── */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card
-              title="User-initiated code changes"
-              subtitle="Compares the total lines of code suggested and manually added by users through code completions and chat panel actions (insert, copy, and apply)"
+              title={t("codeGen.userInitiatedTitle")}
+              subtitle={t("codeGen.userInitiatedSubtitle")}
             >
               {userByFeatureChart ? (
                 <div className="h-[280px]">
@@ -336,8 +342,8 @@ export default function CodeGenerationPage() {
               )}
             </Card>
             <Card
-              title="Agent-initiated code changes"
-              subtitle="Compares the total lines of code automatically added to and deleted from the codebase by agents on behalf of users, combining edit, agent, and custom modes"
+              title={t("codeGen.agentInitiatedTitle")}
+              subtitle={t("codeGen.agentInitiatedSubtitle")}
             >
               {agentByFeatureChart ? (
                 <div className="h-[280px]">
@@ -352,8 +358,8 @@ export default function CodeGenerationPage() {
           {/* ── User vs Agent by Model ── */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card
-              title="User-initiated code changes per model"
-              subtitle="Compares the total lines of code suggested and manually added by users, grouped by model used"
+              title={t("codeGen.userPerModelTitle")}
+              subtitle={t("codeGen.userPerModelSubtitle")}
             >
               {userByModelChart ? (
                 <div className="h-[280px]">
@@ -364,8 +370,8 @@ export default function CodeGenerationPage() {
               )}
             </Card>
             <Card
-              title="Agent-initiated code changes per model"
-              subtitle="Compares the total lines of code added and deleted by agents on behalf of users, grouped by model used"
+              title={t("codeGen.agentPerModelTitle")}
+              subtitle={t("codeGen.agentPerModelSubtitle")}
             >
               {agentByModelChart ? (
                 <div className="h-[280px]">
@@ -380,8 +386,8 @@ export default function CodeGenerationPage() {
           {/* ── User vs Agent by Language ── */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card
-              title="User-initiated code changes per language"
-              subtitle="Compares the total lines of code suggested and manually added by users, grouped by language used"
+              title={t("codeGen.userPerLanguageTitle")}
+              subtitle={t("codeGen.userPerLanguageSubtitle")}
             >
               {userByLangChart ? (
                 <div className="h-[280px]">
@@ -392,8 +398,8 @@ export default function CodeGenerationPage() {
               )}
             </Card>
             <Card
-              title="Agent-initiated code changes per language"
-              subtitle="Compares the total lines of code added and deleted by agents on behalf of users, grouped by language used"
+              title={t("codeGen.agentPerLanguageTitle")}
+              subtitle={t("codeGen.agentPerLanguageSubtitle")}
             >
               {agentByLangChart ? (
                 <div className="h-[280px]">
@@ -405,7 +411,9 @@ export default function CodeGenerationPage() {
             </Card>
           </div>
         </>
-      ) : null}
+      ) : (
+        <EmptyState hasData={!!dataRange?.lastSyncAt} />
+      )}
     </div>
   );
 }
@@ -414,10 +422,10 @@ export default function CodeGenerationPage() {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -426,10 +434,10 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="mt-1 text-[11px] text-gray-400 leading-tight">{sub}</p>}
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
+      {sub && <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500 leading-tight">{sub}</p>}
     </div>
   );
 }

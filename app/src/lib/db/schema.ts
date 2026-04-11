@@ -41,6 +41,7 @@ export const dimEnterprise = pgTable("dim_enterprise", {
 export const dimOrg = pgTable("dim_org", {
   orgId: serial("org_id").primaryKey(),
   orgName: varchar("org_name", { length: 255 }).notNull().unique(),
+  githubOrgId: integer("github_org_id"),
   enterpriseId: integer("enterprise_id").references(() => dimEnterprise.enterpriseId),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -123,6 +124,7 @@ export const factCopilotUsageDaily = pgTable(
     codeGenerationActivityCount: integer("code_generation_activity_count").default(0).notNull(),
     codeAcceptanceActivityCount: integer("code_acceptance_activity_count").default(0).notNull(),
     usedAgent: boolean("used_agent").default(false).notNull(),
+    usedCopilotCodingAgent: boolean("used_copilot_coding_agent").default(false).notNull(),
     usedChat: boolean("used_chat").default(false).notNull(),
     usedCli: boolean("used_cli").default(false).notNull(),
     locSuggestedToAddSum: integer("loc_suggested_to_add_sum").default(0).notNull(),
@@ -237,16 +239,56 @@ export const factCliDaily = pgTable(
   ]
 );
 
+export const factOrgAggregateDaily = pgTable(
+  "fact_org_aggregate_daily",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    day: date("day").notNull(),
+    orgId: integer("org_id").references(() => dimOrg.orgId),
+    scope: varchar("scope", { length: 20 }).default("organization").notNull(),
+    dailyActiveUsers: integer("daily_active_users").default(0),
+    weeklyActiveUsers: integer("weekly_active_users").default(0),
+    monthlyActiveUsers: integer("monthly_active_users").default(0),
+    monthlyActiveAgentUsers: integer("monthly_active_agent_users").default(0),
+    monthlyActiveChatUsers: integer("monthly_active_chat_users").default(0),
+    dailyActiveCliUsers: integer("daily_active_cli_users").default(0),
+    // Pull Request metrics
+    prTotalCreated: integer("pr_total_created").default(0),
+    prTotalReviewed: integer("pr_total_reviewed").default(0),
+    prTotalMerged: integer("pr_total_merged").default(0),
+    prMedianMinutesToMerge: numeric("pr_median_minutes_to_merge"),
+    prTotalSuggestions: integer("pr_total_suggestions").default(0),
+    prTotalAppliedSuggestions: integer("pr_total_applied_suggestions").default(0),
+    prTotalCreatedByCopilot: integer("pr_total_created_by_copilot").default(0),
+    prTotalReviewedByCopilot: integer("pr_total_reviewed_by_copilot").default(0),
+    prTotalMergedCreatedByCopilot: integer("pr_total_merged_created_by_copilot").default(0),
+    prTotalMergedReviewedByCopilot: integer("pr_total_merged_reviewed_by_copilot").default(0),
+    prMedianMinutesToMergeCopilotAuthored: numeric("pr_median_minutes_to_merge_copilot_authored"),
+    prMedianMinutesToMergeCopilotReviewed: numeric("pr_median_minutes_to_merge_copilot_reviewed"),
+    prTotalCopilotSuggestions: integer("pr_total_copilot_suggestions").default(0),
+    prTotalCopilotAppliedSuggestions: integer("pr_total_copilot_applied_suggestions").default(0),
+  },
+  (table) => [
+    uniqueIndex("idx_fact_org_agg_unique").on(table.day, table.orgId, table.scope),
+    index("idx_fact_org_agg_day").on(table.day),
+  ]
+);
+
 export const ingestionLog = pgTable("ingestion_log", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   ingestionDate: date("ingestion_date").notNull(),
   source: varchar("source", { length: 20 }).default("api").notNull(),
+  scope: varchar("scope", { length: 30 }).default("enterprise"),
+  scopeDetail: varchar("scope_detail", { length: 500 }),
+  orgName: varchar("org_name", { length: 255 }),
+  orgsDiscovered: integer("orgs_discovered").default(0),
   startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   status: varchar("status", { length: 20 }).default("running").notNull(),
   recordsFetched: integer("records_fetched").default(0),
   recordsInserted: integer("records_inserted").default(0),
   recordsSkipped: integer("records_skipped").default(0),
+  aggregateRecords: integer("aggregate_records").default(0),
   errorMessage: text("error_message"),
   apiRequests: integer("api_requests").default(0),
   logMessages: text("log_messages"),
@@ -282,3 +324,22 @@ export const alertRules = pgTable("alert_rules", {
   createdBy: varchar("created_by", { length: 255 }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ── Audit Log ──
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    action: varchar("action", { length: 100 }).notNull(),
+    category: varchar("category", { length: 50 }).notNull(),
+    actor: varchar("actor", { length: 255 }).default("system").notNull(),
+    details: jsonb("details"),
+    ipAddress: varchar("ip_address", { length: 45 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_audit_log_category").on(table.category),
+    index("idx_audit_log_created_at").on(table.createdAt),
+  ]
+);

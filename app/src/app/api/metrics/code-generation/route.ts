@@ -4,12 +4,14 @@ import { factCopilotUsageDaily, rawCopilotUsage, dimUser } from "@/lib/db/schema
 import { sql, and, gte, lte, eq, inArray } from "drizzle-orm";
 import { daysAgo, isValidDate } from "@/lib/utils";
 import { z } from "zod";
+import { safeErrorMessage } from "@/lib/auth";
 
 const querySchema = z.object({
   days: z.coerce.number().int().positive().optional(),
   start: z.string().refine(isValidDate).optional(),
   end: z.string().refine(isValidDate).optional(),
   userId: z.coerce.number().int().optional(),
+  orgId: z.string().optional(),
 });
 
 /** Agent-initiated feature names */
@@ -44,14 +46,29 @@ export async function GET(request: NextRequest) {
       start: sp.get("start") ?? undefined,
       end: sp.get("end") ?? undefined,
       userId: sp.get("userId") ?? undefined,
+      orgId: sp.get("orgId") ?? undefined,
     });
 
     const endDate = params.end ?? new Date().toISOString().split("T")[0];
     const startDate = params.start ?? daysAgo(params.days ?? 28);
 
-    // Resolve user filter
+    // Resolve user filter (user, org)
     let userIds: number[] | null = null;
-    if (params.userId) userIds = [params.userId];
+    if (params.userId) {
+      userIds = [params.userId];
+    } else if (params.orgId) {
+      const orgIds = params.orgId.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+      if (orgIds.length > 0) {
+        const conditions = [eq(dimUser.isCurrent, true)];
+        if (orgIds.length === 1) conditions.push(eq(dimUser.orgId, orgIds[0]));
+        else conditions.push(inArray(dimUser.orgId, orgIds));
+        const orgUsers = await db
+          .select({ userId: dimUser.userId })
+          .from(dimUser)
+          .where(and(...conditions));
+        userIds = orgUsers.map((u) => u.userId);
+      }
+    }
 
     // WHERE helpers
     const factWhere = () => {
@@ -342,8 +359,7 @@ export async function GET(request: NextRequest) {
       agentInitiatedByLanguage,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Code generation API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Code generation API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }

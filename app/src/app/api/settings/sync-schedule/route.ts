@@ -7,6 +7,8 @@ import {
 } from "@/lib/etl/scheduler";
 import { getSetting, setSetting } from "@/lib/db/settings";
 import { z } from "zod";
+import { logAudit, getClientIp } from "@/lib/audit";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +26,8 @@ export async function GET() {
       enabled: status.enabled || savedEnabled === "true",
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to get scheduler status";
-    console.error("Sync schedule GET error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Sync schedule GET error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to get scheduler status") }, { status: 500 });
   }
 }
 
@@ -57,6 +58,12 @@ export async function POST(request: NextRequest) {
 
       startScheduler(minutes);
       const status = getSchedulerStatus();
+      logAudit({
+        action: "scheduler_started",
+        category: "data_sync",
+        details: { intervalMinutes: minutes },
+        ipAddress: getClientIp(request),
+      });
 
       return NextResponse.json({
         success: true,
@@ -66,6 +73,11 @@ export async function POST(request: NextRequest) {
     } else {
       await setSetting("sync_enabled", "false");
       stopScheduler();
+      logAudit({
+        action: "scheduler_stopped",
+        category: "data_sync",
+        ipAddress: getClientIp(request),
+      });
 
       return NextResponse.json({
         success: true,
@@ -80,8 +92,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const message = err instanceof Error ? err.message : "Failed to update scheduler";
-    console.error("Sync schedule POST error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Sync schedule POST error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to update scheduler") }, { status: 500 });
   }
 }

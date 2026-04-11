@@ -1,0 +1,1 @@
+ALTER TABLE "fact_copilot_usage_daily" ADD COLUMN "used_copilot_coding_agent" boolean DEFAULT false NOT NULL;

@@ -6,6 +6,7 @@ import { daysAgo, isValidDate } from "@/lib/utils";
 import { z } from "zod";
 import { getGitHubConfig } from "@/lib/db/settings";
 import { resolveDisplayNames, formatUserLabel } from "@/lib/github/resolve-display-names";
+import { safeErrorMessage } from "@/lib/auth";
 
 const querySchema = z.object({
   start: z.string().refine(isValidDate).optional(),
@@ -124,8 +125,7 @@ export async function GET(request: NextRequest) {
       users: result,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Users API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Users API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }

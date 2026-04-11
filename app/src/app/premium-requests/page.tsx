@@ -11,8 +11,15 @@ import {
   Legend,
 } from "chart.js";
 import { Bar, Doughnut } from "react-chartjs-2";
+import { useChartOptions } from "@/lib/theme/chart-theme";
+import { useTranslation } from "@/lib/i18n/locale-provider";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { DataTable } from "@/components/ui/data-table";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePdfExport } from "@/components/ui/pdf-export";
+import { ConfigurationBanner } from "@/components/layout/configuration-banner";
+import { AlertTriangle, Settings } from "lucide-react";
+import Link from "next/link";
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend
@@ -77,44 +84,11 @@ const MONTH_NAMES = [
 
 /* ── Chart config ── */
 
-const tooltipStyle = {
-  backgroundColor: "#fff",
-  titleColor: "#111827",
-  bodyColor: "#374151",
-  borderColor: "#e5e7eb",
-  borderWidth: 1,
-  cornerRadius: 8,
-  padding: 10,
-  boxPadding: 4,
-  titleFont: { weight: "bold" as const, size: 12 },
-  bodyFont: { size: 11 },
-};
+// tooltipStyle moved to component via useChartOptions
 
-const doughnutOpts = {
-  responsive: true,
-  maintainAspectRatio: false,
-  cutout: "60%",
-  plugins: {
-    legend: {
-      position: "right" as const,
-      labels: { usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 }, padding: 12 },
-    },
-    tooltip: tooltipStyle,
-  },
-};
+// doughnutOpts moved to component via useChartOptions
 
-const barOpts = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: tooltipStyle,
-  },
-  scales: {
-    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#9ca3af" } },
-    y: { grid: { color: "#f0f0f0" }, ticks: { font: { size: 11 }, color: "#9ca3af" } },
-  },
-};
+// barOpts moved to component via useChartOptions
 
 const MODEL_COLORS = [
   "#8b5cf6", "#a855f7", "#c084fc", "#d8b4fe", "#7c3aed",
@@ -125,12 +99,15 @@ const MODEL_COLORS = [
 /* ── Component ── */
 
 export default function PremiumRequestsPage() {
+  const { commonOptions: barOpts, doughnutOptions: doughnutOpts } = useChartOptions();
+  const { t } = useTranslation();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData] = useState<PremiumData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { ref: reportRef, ExportButton: PdfButton } = usePdfExport("copilot-premium-requests");
 
   useEffect(() => {
     setLoading(true);
@@ -205,23 +182,30 @@ export default function PremiumRequestsPage() {
   /* Render */
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center text-sm text-gray-400">
-        Loading premium request billing data...
-      </div>
-    );
+    return <LoadingSpinner message={t("premiumRequests.loadingPremium")} />;
   }
 
   if (error) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 py-12 text-center">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-          <h2 className="text-lg font-semibold text-red-800">Unable to load premium request data</h2>
-          <p className="mt-2 text-sm text-red-600">{error}</p>
-          <p className="mt-3 text-xs text-red-500">
-            Ensure your PAT has <code className="rounded-sm bg-red-100 px-1">manage_billing:copilot</code> or{" "}
-            <code className="rounded-sm bg-red-100 px-1">read:enterprise</code> scope.
+      <div className="space-y-6">
+        <ConfigurationBanner />
+        <div className="flex flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-6 py-16 text-center dark:border-amber-800 dark:bg-amber-950/40">
+          <div className="mb-4 rounded-full bg-amber-100 p-4 dark:bg-amber-900/50">
+            <AlertTriangle className="h-8 w-8 text-amber-500 dark:text-amber-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {t("common.apiError")}
+          </h3>
+          <p className="mx-auto mt-2 max-w-lg text-sm text-gray-600 dark:text-gray-400">
+            {error}
           </p>
+          <Link
+            href="/settings"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition-colors hover:bg-blue-700"
+          >
+            <Settings className="h-4 w-4" />
+            {t("configBanner.goToSettings")}
+          </Link>
         </div>
       </div>
     );
@@ -235,31 +219,35 @@ export default function PremiumRequestsPage() {
     : 0;
 
   return (
-    <div className="space-y-6">
+    <div ref={reportRef} className="space-y-6">
+      <ConfigurationBanner />
       {/* Header */}
-      <div>
-        <Breadcrumb items={[{ label: "Premium Requests", href: "/premium-requests" }]} />
-        <h1 className="mt-1 text-xl font-bold text-gray-900">GitHub Copilot Premium Requests</h1>
-        <p className="text-sm text-gray-500">
-          Premium request usage and billing — live from GitHub Enterprise Billing API
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <Breadcrumb items={[{ label: "Premium Requests", href: "/premium-requests" }]} />
+          <h1 className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{t("premiumRequests.title")}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {t("premiumRequests.subtitle")}
+          </p>
+        </div>
+        <PdfButton />
       </div>
 
       {/* Month Selector */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => goMonth(-1)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           ← Prev
         </button>
-        <span className="text-sm font-medium text-gray-900">
+        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
           {MONTH_NAMES[month - 1]} {year}
         </span>
         <button
           onClick={() => goMonth(1)}
           disabled={year === now.getFullYear() && month === now.getMonth() + 1}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           Next →
         </button>
@@ -267,28 +255,28 @@ export default function PremiumRequestsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <Kpi label="Total Premium Requests" value={fmtNum(totals.totalPremiumRequests)} />
-        <Kpi label="Included Quota" value={fmtNum(totals.includedQuota)} color="text-green-600" />
-        <Kpi label="Included Used" value={fmtNum(totals.includedUsed)} color="text-green-600" />
-        <Kpi label="Overage (Paid)" value={fmtNum(totals.overage)} color={totals.overage > 0 ? "text-red-600" : "text-gray-900"} />
-        <Kpi label="Utilization" value={`${utilizationPct}%`} color={utilizationPct > 100 ? "text-red-600" : utilizationPct > 80 ? "text-amber-600" : "text-green-600"} />
-        <Kpi label="Overage Cost" value={fmt$(totals.netAmount)} color={totals.netAmount > 0 ? "text-red-600" : "text-gray-900"} />
+        <Kpi label={t("premiumRequests.totalPremiumRequests")} value={fmtNum(totals.totalPremiumRequests)} />
+        <Kpi label={t("premiumRequests.includedQuota")} value={fmtNum(totals.includedQuota)} color="text-green-600" />
+        <Kpi label={t("premiumRequests.includedUsed")} value={fmtNum(totals.includedUsed)} color="text-green-600" />
+        <Kpi label={t("premiumRequests.overagePaid")} value={fmtNum(totals.overage)} color={totals.overage > 0 ? "text-red-600" : "text-gray-900"} />
+        <Kpi label={t("premiumRequests.utilizationLabel")} value={`${utilizationPct}%`} color={utilizationPct > 100 ? "text-red-600" : utilizationPct > 80 ? "text-amber-600" : "text-green-600"} />
+        <Kpi label={t("premiumRequests.overageCost")} value={fmt$(totals.netAmount)} color={totals.netAmount > 0 ? "text-red-600" : "text-gray-900"} />
       </div>
 
       {/* Overage Warning */}
       {totals.overage > 0 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-red-900">Overage Detected</h3>
-              <p className="text-sm text-red-700">
+              <h3 className="font-semibold text-red-900 dark:text-red-100">Overage Detected</h3>
+              <p className="text-sm text-red-700 dark:text-red-300">
                 {fmtNum(totals.overage)} premium requests exceeded the included quota of {fmtNum(totals.includedQuota)}.
                 Overage requests are billed at $0.04 per request.
               </p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-red-900">{fmt$(totals.netAmount)}</p>
-              <p className="text-xs text-red-600">overage cost</p>
+              <p className="text-2xl font-bold text-red-900 dark:text-red-100">{fmt$(totals.netAmount)}</p>
+              <p className="text-xs text-red-600 dark:text-red-400">overage cost</p>
             </div>
           </div>
         </div>
@@ -296,12 +284,12 @@ export default function PremiumRequestsPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="Included vs overage" subtitle="Premium request quota utilization">
+        <Card title={t("premiumRequests.includedVsOverage")} subtitle={t("premiumRequests.includedVsOverageDesc")}>
           {includedVsOverageDonut && (
             <div className="h-[280px]"><Doughnut data={includedVsOverageDonut} options={doughnutOpts} /></div>
           )}
         </Card>
-        <Card title="Premium requests by model" subtitle="Top models by premium request count">
+        <Card title={t("premiumRequests.byModel")} subtitle={t("premiumRequests.byModelDesc")}>
           {modelBar ? (
             <div className="h-[280px]"><Bar data={modelBar} options={barOpts} /></div>
           ) : (
@@ -311,37 +299,37 @@ export default function PremiumRequestsPage() {
       </div>
 
       {orgBar && (
-        <Card title="Premium requests by organization" subtitle="Breakdown across organizations in the enterprise">
+        <Card title={t("premiumRequests.byOrganization")} subtitle={t("premiumRequests.byOrganizationDesc")}>
           <div className="h-[280px]"><Bar data={orgBar} options={barOpts} /></div>
         </Card>
       )}
 
       {/* Quota Breakdown */}
-      <Card title="Quota allocation" subtitle="Per-plan included premium request quotas">
+      <Card title={t("premiumRequests.quotaAllocation")} subtitle={t("premiumRequests.quotaAllocationDesc")}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:text-gray-400">
                 <th className="pb-2 pr-4">Plan</th>
                 <th className="pb-2 pr-4 text-right">Seats</th>
                 <th className="pb-2 pr-4 text-right">Quota / Seat</th>
                 <th className="pb-2 text-right">Total Quota</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {Object.entries(data.seats.planCounts).map(([plan, count]) => (
-                <tr key={plan} className="hover:bg-gray-50">
-                  <td className="py-2 pr-4 font-medium text-gray-900 capitalize">{plan}</td>
-                  <td className="py-2 pr-4 text-right text-gray-700">{fmtNum(count)}</td>
-                  <td className="py-2 pr-4 text-right text-gray-700">{fmtNum(PLAN_QUOTAS[plan] ?? 0)}</td>
-                  <td className="py-2 text-right font-medium text-gray-900">{fmtNum((PLAN_QUOTAS[plan] ?? 0) * count)}</td>
+                <tr key={plan} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <td className="py-2 pr-4 font-medium text-gray-900 capitalize dark:text-gray-100">{plan}</td>
+                  <td className="py-2 pr-4 text-right text-gray-700 dark:text-gray-300">{fmtNum(count)}</td>
+                  <td className="py-2 pr-4 text-right text-gray-700 dark:text-gray-300">{fmtNum(PLAN_QUOTAS[plan] ?? 0)}</td>
+                  <td className="py-2 text-right font-medium text-gray-900 dark:text-gray-100">{fmtNum((PLAN_QUOTAS[plan] ?? 0) * count)}</td>
                 </tr>
               ))}
               <tr className="font-medium">
-                <td className="py-2 pr-4 text-gray-900">Total</td>
-                <td className="py-2 pr-4 text-right text-gray-700">{fmtNum(data.seats.total)}</td>
-                <td className="py-2 pr-4 text-right text-gray-500">—</td>
-                <td className="py-2 text-right text-green-700">{fmtNum(totals.includedQuota)}</td>
+                <td className="py-2 pr-4 text-gray-900 dark:text-gray-100">Total</td>
+                <td className="py-2 pr-4 text-right text-gray-700 dark:text-gray-300">{fmtNum(data.seats.total)}</td>
+                <td className="py-2 pr-4 text-right text-gray-500 dark:text-gray-400">—</td>
+                <td className="py-2 text-right text-green-700 dark:text-green-400">{fmtNum(totals.includedQuota)}</td>
               </tr>
             </tbody>
           </table>
@@ -350,24 +338,24 @@ export default function PremiumRequestsPage() {
 
       {/* Model Breakdown Table */}
       {data.perModelBreakdown.length > 0 && (
-        <Card title="Model breakdown" subtitle="Premium request usage per model (SKU)">
+        <Card title={t("premiumRequests.modelBreakdown")} subtitle={t("premiumRequests.modelBreakdownDesc")}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:text-gray-400">
                   <th className="pb-2 pr-4">Model</th>
                   <th className="pb-2 pr-4 text-right">Requests</th>
                   <th className="pb-2 pr-4 text-right">Gross Amount</th>
                   <th className="pb-2 text-right">Net Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {data.perModelBreakdown.map((m) => (
-                  <tr key={m.sku} className="hover:bg-gray-50">
-                    <td className="py-2 pr-4 font-medium text-gray-900">{m.sku}</td>
-                    <td className="py-2 pr-4 text-right text-gray-700">{fmtNum(m.grossQuantity)}</td>
-                    <td className="py-2 pr-4 text-right text-gray-700">{fmt$(m.grossAmount)}</td>
-                    <td className="py-2 text-right font-medium text-gray-900">{fmt$(m.netAmount)}</td>
+                  <tr key={m.sku} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="py-2 pr-4 font-medium text-gray-900 dark:text-gray-100">{m.sku}</td>
+                    <td className="py-2 pr-4 text-right text-gray-700 dark:text-gray-300">{fmtNum(m.grossQuantity)}</td>
+                    <td className="py-2 pr-4 text-right text-gray-700 dark:text-gray-300">{fmt$(m.grossAmount)}</td>
+                    <td className="py-2 text-right font-medium text-gray-900 dark:text-gray-100">{fmt$(m.netAmount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -381,23 +369,25 @@ export default function PremiumRequestsPage() {
         <Card title={`User breakdown (${data.perUserBreakdown.length})`} subtitle="Premium request consumption per user">
           <DataTable
             columns={[
-              { key: "displayLabel", header: "User", render: (value: unknown) => <span className="font-medium text-gray-900">{String(value)}</span> },
+              { key: "displayLabel", header: "User", render: (value: unknown) => <span className="font-medium text-gray-900 dark:text-gray-100">{String(value)}</span> },
               { key: "grossQuantity", header: "Requests", align: "right", render: (value: unknown) => fmtNum(Number(value)) },
               { key: "grossAmount", header: "Gross Amount", align: "right", render: (value: unknown) => fmt$(Number(value)) },
-              { key: "netAmount", header: "Net Amount", align: "right", render: (value: unknown) => <span className="font-medium text-gray-900">{fmt$(Number(value))}</span> },
+              { key: "netAmount", header: "Net Amount", align: "right", render: (value: unknown) => <span className="font-medium text-gray-900 dark:text-gray-100">{fmt$(Number(value))}</span> },
             ]}
             data={(data.perUserBreakdown) as unknown as Record<string, unknown>[]}
-            emptyMessage="No user data"
-            searchPlaceholder="Search users..."
+            emptyMessage={t("premiumRequests.noUserData")}
+            searchPlaceholder={t("common.searchUsersEllipsis")}
             pageSize={25}
+            defaultSortKey="grossQuantity"
+            defaultSortDir="desc"
           />
         </Card>
       )}
 
       {/* Info Note */}
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
         <p className="font-medium">About premium request billing</p>
-        <p className="mt-1 text-xs text-blue-700">
+        <p className="mt-1 text-xs text-blue-700 dark:text-blue-400">
           Each Copilot Business seat includes 300 premium requests/month and each Enterprise seat includes 1,000.
           Usage beyond the included quota is billed at $0.04 per request.
           Data is sourced from the GitHub Enterprise Billing API.
@@ -416,10 +406,10 @@ const PLAN_QUOTAS: Record<string, number> = {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-xs">
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+    <div className="rounded-lg border border-gray-200 bg-white shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -428,9 +418,9 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 function Kpi({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${color ?? "text-gray-900"}`}>
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${color ?? "text-gray-900 dark:text-gray-100"}`}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
     </div>

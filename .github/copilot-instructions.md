@@ -12,7 +12,9 @@ See [docs/architecture.md](../docs/architecture.md) for system diagrams, data fl
 
 - **Star schema** database: dimension tables (`dim_*`) + fact tables (`fact_*`) optimized for analytics
 - **ETL pipeline**: `lib/github/copilot-api.ts` → `lib/etl/ingest.ts` → `lib/etl/transform.ts` → PostgreSQL
-- **GitHub API version**: `2026-03-10` (Copilot Usage Metrics API)
+- **GitHub API version**: `2026-03-10` (all endpoints — Copilot Usage Metrics, org listing, members)
+- **Theme system**: light/dark/system via `ThemeProvider` + Tailwind `class` strategy
+- **Internationalization**: 4 languages (en/ar/es/fr) via `LocaleProvider` + `useTranslation()` hook
 - **Server Components** by default; `"use client"` only when state/effects are needed
 - **API routes** under `app/src/app/api/` with Zod validation on all query params
 - **Standalone output** mode for Docker — `public/` and `drizzle/` must be explicitly copied in Dockerfile
@@ -116,6 +118,7 @@ Date format is always `YYYY-MM-DD`. Use `isValidDate()` from `@/lib/utils` for v
 - Server Components by default (no directive needed)
 - Add `"use client"` only for components using `useState`, `useEffect`, or browser APIs
 - Charts: `react-chartjs-2` wrappers (`Line`, `Bar`, `Doughnut`) with Chart.js 4
+- Use `useChartOptions()` from `@/lib/theme/chart-theme` for theme-aware Chart.js options
 - Reusable layout components in `components/layout/`
 - Use `next/image` for images, `lucide-react` for icons
 
@@ -123,10 +126,33 @@ Date format is always `YYYY-MM-DD`. Use `isValidDate()` from `@/lib/utils` for v
 
 Dashboard pages follow a consistent pattern:
 1. `"use client"` directive
-2. `ReportFilters` component for date range + user filter
-3. `fetch()` to internal API routes with filter params
-4. Chart.js visualizations + `DataTable` for tabular data
-5. Loading skeleton states while data fetches
+2. `const { t } = useTranslation()` for i18n strings
+3. `const { commonOptions, doughnutOptions, legendPreset } = useChartOptions()` for theme-aware charts
+4. `ReportFilters` component for date range + user filter
+5. `fetch()` to internal API routes with filter params
+6. Chart.js visualizations + `DataTable` for tabular data
+7. Loading skeleton states while data fetches
+8. All user-visible strings use `t()` calls — no hardcoded text
+
+### Theme (Dark Mode)
+
+- Three modes: light, dark, system — toggled via sidebar
+- `ThemeProvider` in `app/src/lib/theme/theme-provider.tsx` manages state via localStorage
+- Tailwind `class` strategy: `html.dark` class toggles dark mode
+- All components use `dark:` Tailwind variants for dark mode styling
+- Charts use `useChartOptions()` hook for theme-aware options (grid, text, tooltip colors)
+- `useTheme()` returns `{ theme, setTheme, resolvedTheme }`
+
+### Internationalization (i18n)
+
+- Four languages: English, Arabic (RTL), Spanish, French
+- `LocaleProvider` in `app/src/lib/i18n/locale-provider.tsx` manages locale via localStorage
+- Translations in `app/src/lib/i18n/translations/{en,ar,es,fr}.ts`
+- Access via `useTranslation()` hook: `const { t } = useTranslation()`
+- Keys use dot-path notation: `t("dashboard.activeUsers")`
+- Template placeholders: `t("dashboard.ofTotal", count)` → replaces `{0}`
+- All page titles, subtitles, KPI labels, chart titles, and table headers use `t()` calls
+- TypeScript type safety: `TranslationKeys` type exported from `en.ts`
 
 ## Build and Test
 

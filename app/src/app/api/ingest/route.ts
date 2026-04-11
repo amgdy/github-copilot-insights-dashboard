@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestCopilotUsage } from "@/lib/etl/ingest";
-import { getGitHubConfig } from "@/lib/db/settings";
+import { getGitHubConfig, getSyncScopeConfig } from "@/lib/db/settings";
 import { z } from "zod";
 import { isValidDate } from "@/lib/utils";
+import { logAudit, getClientIp } from "@/lib/audit";
+import { safeErrorMessage } from "@/lib/auth";
 
 const bodySchema = z.object({
   day: z.string().refine(isValidDate).optional(),
@@ -21,11 +23,21 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const params = bodySchema.parse(body);
+    const { scopes, orgLogins } = await getSyncScopeConfig();
 
     const result = await ingestCopilotUsage({
       enterpriseSlug: slug,
       token,
       day: params.day,
+      scopes,
+      orgLogins,
+    });
+
+    logAudit({
+      action: "data_sync_manual",
+      category: "data_sync",
+      details: { day: params.day ?? "latest", scopes },
+      ipAddress: getClientIp(request),
     });
 
     return NextResponse.json({
@@ -33,8 +45,7 @@ export async function POST(request: NextRequest) {
       ...result,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Ingestion failed";
-    console.error("Ingest API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Ingest API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Ingestion failed") }, { status: 500 });
   }
 }

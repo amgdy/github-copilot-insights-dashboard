@@ -15,17 +15,29 @@ export interface CopilotMetricsReportResponse {
   report_end_day?: string;
 }
 
+// ── Enterprise Organization (from /enterprises/{enterprise}/organizations) ──
+
+export interface EnterpriseOrg {
+  login: string;
+  id: number;
+  node_id?: string;
+  url?: string;
+  description?: string;
+}
+
 // ── User-Level Record (each NDJSON line in a downloaded report) ──
 
 export interface CopilotUsageRecord {
   day: string;
   enterprise_id: string;
+  organization_id?: string;
   user_id: number;
   user_login: string;
   user_initiated_interaction_count: number;
   code_generation_activity_count: number;
   code_acceptance_activity_count: number;
   used_agent: boolean;
+  used_copilot_coding_agent: boolean;
   used_chat: boolean;
   used_cli: boolean;
   loc_suggested_to_add_sum: number;
@@ -47,6 +59,45 @@ export interface CopilotUsageRecord {
   totals_by_language_model: TotalsByLanguageModel[];
   totals_by_model_feature: TotalsByModelFeature[];
   totals_by_cli?: TotalsByCli;
+
+  /** Injected at ingestion time when fetching per-org. Not from the API. */
+  _orgLogin?: string;
+}
+
+// ── Aggregate Record (enterprise-1-day / organization-1-day NDJSON) ──
+
+export interface CopilotAggregateRecord {
+  day: string;
+  enterprise_id?: string;
+  organization_id?: string;
+  daily_active_users?: number;
+  weekly_active_users?: number;
+  monthly_active_users?: number;
+  monthly_active_agent_users?: number;
+  monthly_active_chat_users?: number;
+  daily_active_cli_users?: number;
+  pull_requests?: PullRequestMetrics;
+
+  /** Injected at ingestion time. Not from the API. */
+  _orgLogin?: string;
+  _scope?: "enterprise" | "organization";
+}
+
+export interface PullRequestMetrics {
+  total_created?: number;
+  total_reviewed?: number;
+  total_merged?: number;
+  median_minutes_to_merge?: number;
+  total_suggestions?: number;
+  total_applied_suggestions?: number;
+  total_created_by_copilot?: number;
+  total_reviewed_by_copilot?: number;
+  total_merged_created_by_copilot?: number;
+  total_merged_reviewed_by_copilot?: number;
+  median_minutes_to_merge_copilot_authored?: number;
+  median_minutes_to_merge_copilot_reviewed?: number;
+  total_copilot_suggestions?: number;
+  total_copilot_applied_suggestions?: number;
 }
 
 export interface TotalsByIde {

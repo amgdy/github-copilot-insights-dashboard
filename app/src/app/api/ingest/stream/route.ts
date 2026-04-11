@@ -1,10 +1,12 @@
-import { getGitHubConfig } from "@/lib/db/settings";
+import { getGitHubConfig, getSyncScopeConfig } from "@/lib/db/settings";
 import { ingestCopilotUsage } from "@/lib/etl/ingest";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
   const { token, enterpriseSlug: slug } = await getGitHubConfig();
+  const { scopes, orgLogins } = await getSyncScopeConfig();
 
   if (!token || !slug) {
     return new Response(
@@ -29,6 +31,8 @@ export async function POST() {
         const result = await ingestCopilotUsage({
           enterpriseSlug: slug,
           token,
+          scopes,
+          orgLogins,
           onLog: (msg) => {
             send("log", `[${new Date().toISOString()}] ${msg}`);
           },
@@ -36,7 +40,7 @@ export async function POST() {
 
         send("done", JSON.stringify(result));
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Ingestion failed";
+        const message = safeErrorMessage(err, "Ingestion failed");
         send("error", message);
       } finally {
         controller.close();

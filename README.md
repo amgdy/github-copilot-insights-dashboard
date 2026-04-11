@@ -14,12 +14,22 @@ Enterprise analytics dashboard for **GitHub Copilot** usage, adoption, licensing
 |---|---|---|
 | **Copilot Usage** | `/metrics` | Daily/weekly active users, code completions, chat mode breakdown, model & language analytics |
 | **Code Generation** | `/code-generation` | LOC added/deleted by user vs agent, breakdowns by feature, model, and language |
-| **Agent Impact** | `/agents` | Agent adoption rate, acceptance rate, code generation comparison, top agent users |
+| **PR & Autofix** | `/pull-requests` | AI-assisted PR creation, Copilot code review suggestions, autofix analytics, and merge metrics |
+| **Agent Impact** | `/agents` | Agent adoption rate, IDE Agent vs GitHub Coding Agent breakdown, top agent users |
+| **CLI Impact** | `/cli` | CLI adoption, session/request volumes, token consumption, version distribution |
 | **Copilot Licensing** | `/seats` | Seat assignments, license utilization, plan distribution (live from GitHub API) |
 | **Premium Requests** | `/premium-requests` | Premium model request consumption and budget tracking (live from GitHub API) |
 | **Users** | `/users` | Individual user activity, engagement patterns, and feature adoption |
-| **Models** | `/models` | AI model enablement status, usage volume, and feature breakdown |
-| **Metrics Reference** | `/reference` | Complete metric definitions, calculation formulas, and data sources |
+| **Metrics Reference** | `/reference` | 200+ metric definitions, calculation formulas, and data sources |
+
+### Cross-cutting Features
+
+- **Internationalization** — 4 languages (English, Arabic RTL, Spanish, French) via `useTranslation()` hook
+- **Dark/Light/System theme** — three-mode theme with `dark:` Tailwind variants and theme-aware Chart.js options
+- **PDF export** — one-click PDF generation for all dashboard pages
+- **Configuration banner** — shown when GitHub token or enterprise slug is missing
+- **Audit logging** — tracks admin actions for compliance
+- **Dashboard auth gate** — optional password protection for all dashboard pages
 
 ## Screenshots
 
@@ -147,15 +157,16 @@ ghcp-dashboard/
 │   │   │   ├── api/              # REST API endpoints
 │   │   │   ├── metrics/          # Copilot Usage dashboard
 │   │   │   ├── code-generation/  # Code generation report
+│   │   │   ├── pull-requests/    # PR & Autofix report
 │   │   │   ├── agents/           # Agent impact report
+│   │   │   ├── cli/              # CLI impact report
 │   │   │   ├── seats/            # Licensing page
 │   │   │   ├── premium-requests/ # Premium requests page
 │   │   │   ├── users/            # User explorer
-│   │   │   ├── models/           # Models & policies
 │   │   │   ├── reference/        # Metrics reference
-│   │   │   └── settings/         # Configuration & data sync
+│   │   │   └── settings/         # Configuration, data sync & audit log
 │   │   ├── components/           # Shared React components
-│   │   ├── lib/                  # Database, ETL, utilities
+│   │   ├── lib/                  # Database, ETL, i18n, theme, utilities
 │   │   └── types/                # TypeScript type definitions
 │   ├── drizzle/                  # Database migrations
 │   ├── public/                   # Static assets

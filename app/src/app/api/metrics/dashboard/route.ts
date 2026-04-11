@@ -14,6 +14,7 @@ import {
 import { sql, and, gte, lte, eq, inArray } from "drizzle-orm";
 import { daysAgo, isValidDate } from "@/lib/utils";
 import { z } from "zod";
+import { safeErrorMessage } from "@/lib/auth";
 
 const querySchema = z.object({
   days: z.coerce.number().int().positive().optional(),
@@ -21,21 +22,29 @@ const querySchema = z.object({
   end: z.string().refine(isValidDate).optional(),
   userId: z.coerce.number().int().optional(),
   teamName: z.string().optional(),
-  orgId: z.coerce.number().int().optional(),
+  orgId: z.string().optional(),
 });
+
+/** Parse comma-separated org IDs into number array. */
+function parseOrgIds(orgId?: string): number[] {
+  if (!orgId) return [];
+  return orgId.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+}
 
 /** Build a list of userIds to filter by (from team/org/user filters). Returns null if no filter. */
 async function resolveUserFilter(params: {
   userId?: number;
   teamName?: string;
-  orgId?: number;
+  orgId?: string;
 }): Promise<number[] | null> {
   if (params.userId) return [params.userId];
 
-  if (params.teamName || params.orgId) {
+  const orgIds = parseOrgIds(params.orgId);
+  if (params.teamName || orgIds.length > 0) {
     const conditions = [eq(dimUser.isCurrent, true)];
     if (params.teamName) conditions.push(eq(dimUser.teamName, params.teamName));
-    if (params.orgId) conditions.push(eq(dimUser.orgId, params.orgId));
+    if (orgIds.length === 1) conditions.push(eq(dimUser.orgId, orgIds[0]));
+    else if (orgIds.length > 1) conditions.push(inArray(dimUser.orgId, orgIds));
 
     const users = await db
       .select({ userId: dimUser.userId })
@@ -88,6 +97,7 @@ export async function GET(request: NextRequest) {
     // Run all queries in parallel
     const [
       kpiResult,
+      totalUsersResult,
       dailyActive,
       weeklyActive,
       avgChatPerDay,
@@ -113,6 +123,18 @@ export async function GET(request: NextRequest) {
         })
         .from(factCopilotUsageDaily)
         .where(mainWhere()),
+
+      // 1b. Total Copilot users (all current users in dim_user)
+      db
+        .select({
+          totalUsers: sql<number>`COUNT(DISTINCT ${dimUser.userId})`,
+        })
+        .from(dimUser)
+        .where((() => {
+          const conds = [eq(dimUser.isCurrent, true)];
+          if (userIds) conds.push(inArray(dimUser.userId, userIds));
+          return and(...conds);
+        })()),
 
       // 2. Daily active users
       db
@@ -293,6 +315,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const kpi = kpiResult[0];
+    const totalCopilotUsers = totalUsersResult[0]?.totalUsers ?? 0;
 
     // Find most used chat model
     const topModel = modelTotal.length > 0 ? String(modelTotal[0].name) : "N/A";
@@ -329,6 +352,7 @@ export async function GET(request: NextRequest) {
       period: { start: startDate, end: endDate },
       kpis: {
         activeUsers: kpi.activeUsers,
+        totalCopilotUsers,
         agentUsers: kpi.agentUsers,
         agentAdoptionRate: kpi.activeUsers > 0
           ? Math.round((kpi.agentUsers / kpi.activeUsers) * 100)
@@ -353,9 +377,8 @@ export async function GET(request: NextRequest) {
       modelUsagePerLanguage: langModelPivoted,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Dashboard API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Dashboard API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }
 

@@ -4,6 +4,7 @@ import { dimUser, dimOrg } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getGitHubConfig } from "@/lib/db/settings";
 import { resolveDisplayNames, formatUserLabel } from "@/lib/github/resolve-display-names";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -56,8 +57,7 @@ export async function GET() {
       orgs: orgs.map((o) => ({ id: o.orgId, name: o.orgName })),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Filters API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Filters API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }

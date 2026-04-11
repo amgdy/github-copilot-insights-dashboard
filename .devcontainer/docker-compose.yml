@@ -12,6 +12,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 6g
+        reservations:
+          cpus: "2"
+          memory: 3g
 
   db:
     image: postgres:18
@@ -27,6 +35,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+        reservations:
+          cpus: "1"
+          memory: 1g
+    shm_size: 256m
 
 volumes:
   pgdata:

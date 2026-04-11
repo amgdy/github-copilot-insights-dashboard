@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGitHubConfig } from "@/lib/db/settings";
 import { resolveDisplayNames, formatUserLabel } from "@/lib/github/resolve-display-names";
+import { safeErrorMessage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,18 @@ export async function GET(request: NextRequest) {
     if (!usageRes.ok) {
       const text = await usageRes.text();
       console.error(`Premium billing API error: ${usageRes.status}`, text);
+      if (usageRes.status === 403) {
+        return NextResponse.json(
+          { error: "Access denied. Your PAT may not have the required scopes. Please ensure it has: manage_billing:copilot (read) or manage_billing:enterprise (read). Update scopes at https://github.com/settings/tokens" },
+          { status: 403 }
+        );
+      }
+      if (usageRes.status === 404) {
+        return NextResponse.json(
+          { error: "Enterprise not found. Please verify the enterprise slug in Settings and ensure your PAT has access." },
+          { status: 404 }
+        );
+      }
       return NextResponse.json(
         { error: `GitHub Premium Billing API error: ${usageRes.status} ${usageRes.statusText}` },
         { status: usageRes.status }
@@ -211,8 +224,7 @@ export async function GET(request: NextRequest) {
       perOrgBreakdown,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    console.error("Premium requests API error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Premium requests API error:", err);
+    return NextResponse.json({ error: safeErrorMessage(err, "Internal server error") }, { status: 500 });
   }
 }

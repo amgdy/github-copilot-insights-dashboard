@@ -7,6 +7,12 @@
     },
     "location": {
       "value": "${AZURE_LOCATION}"
+    },
+    "adminPassword": {
+      "value": "${ADMIN_PASSWORD}"
+    },
+    "dashboardPassword": {
+      "value": "${DASHBOARD_PASSWORD}"
     }
   }
 }

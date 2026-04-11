@@ -20,11 +20,12 @@ function formatLabel(minutes: number): string {
 
 async function runIngestion() {
   try {
-    const { getGitHubConfig } = await import("@/lib/db/settings");
+    const { getGitHubConfig, getSyncScopeConfig } = await import("@/lib/db/settings");
     const { ingestCopilotUsage } = await import("@/lib/etl/ingest");
     const { db } = await import("@/lib/db");
     const { ingestionLog } = await import("@/lib/db/schema");
     const { token, enterpriseSlug } = await getGitHubConfig();
+    const { scopes, orgLogins } = await getSyncScopeConfig();
     lastRunAt = new Date();
     if (!token || !enterpriseSlug) {
       console.warn("Scheduled ingest skipped — GitHub token or slug not configured");
@@ -39,8 +40,9 @@ async function runIngestion() {
       });
       return;
     }
-    console.info("Scheduled ETL ingestion started");
-    const result = await ingestCopilotUsage({ token, enterpriseSlug, source: "scheduled" });
+    const orgLabel = scopes.includes("organization") ? `, orgs: ${orgLogins.join(", ")}` : "";
+    console.info(`Scheduled ETL ingestion started (scopes: ${scopes.join("+")}${orgLabel})`);
+    const result = await ingestCopilotUsage({ token, enterpriseSlug, source: "scheduled", scopes, orgLogins });
     console.info(
       `Scheduled ETL ingestion complete — fetched: ${result.recordsFetched}, inserted: ${result.recordsInserted}, skipped: ${result.recordsSkipped}`
     );

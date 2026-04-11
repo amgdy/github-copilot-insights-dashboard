@@ -33,6 +33,8 @@ app/                      # Next.js 16 application
       db/                 # Drizzle ORM: schema, connection, settings
       etl/                # ETL pipeline: ingest + transform
       github/             # GitHub API client (pagination, retry, rate limiting)
+      i18n/               # Internationalization: LocaleProvider, translations (en/ar/es/fr)
+      theme/              # Dark/light/system theme: ThemeProvider, chart-theme
       utils/              # Model display names and helpers
     types/                # TypeScript type definitions
   drizzle/                # Generated SQL migration files
@@ -97,6 +99,28 @@ console.error("Failed to fetch data:", error);
 - Server Components by default — add `"use client"` only when state/effects are needed
 - Dashboard pages: `ReportFilters` for date range + user filter, `DataTable` for tabular data
 - Charts: `react-chartjs-2` wrappers (`Line`, `Bar`, `Doughnut`)
+- Use `useChartOptions()` from `@/lib/theme/chart-theme` for theme-aware Chart.js options
+- Use `useTranslation()` from `@/lib/i18n/locale-provider` for i18n strings
+
+## Theme (Dark Mode)
+
+- Three modes: light, dark, system — toggled via sidebar
+- `ThemeProvider` in `app/src/lib/theme/theme-provider.tsx` manages state via localStorage
+- Tailwind `class` strategy: `html.dark` class toggles dark mode
+- All components use `dark:` Tailwind variants for dark mode styling
+- Charts use `useChartOptions()` hook for theme-aware options (grid, text, tooltip colors)
+- `useTheme()` returns `{ theme, setTheme, resolvedTheme }`
+
+## Internationalization (i18n)
+
+- Four languages: English, Arabic (RTL), Spanish, French
+- `LocaleProvider` in `app/src/lib/i18n/locale-provider.tsx` manages locale via localStorage
+- Translations in `app/src/lib/i18n/translations/{en,ar,es,fr}.ts`
+- Access via `useTranslation()` hook: `const { t } = useTranslation()`
+- Keys use dot-path notation: `t("dashboard.activeUsers")`
+- Template placeholders: `t("dashboard.ofTotal", count)` → replaces `{0}`
+- All page titles, subtitles, KPI labels, chart titles, and table headers use `t()` calls
+- TypeScript type safety: `TranslationKeys` type exported from `en.ts`
 
 ## Docker
 

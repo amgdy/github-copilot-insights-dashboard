@@ -11,7 +11,7 @@ export async function register() {
     }
 
     const sql = postgres(connectionString, { max: 1 });
-    const db = drizzle(sql);
+    const db = drizzle({ client: sql });
 
     try {
       await migrate(db, { migrationsFolder: "./drizzle" });

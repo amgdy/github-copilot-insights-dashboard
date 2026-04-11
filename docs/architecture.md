@@ -30,10 +30,17 @@ All dashboard pages are client components using `"use client"` that fetch data f
 
 | Component | Purpose |
 |---|---|
-| `components/layout/sidebar.tsx` | Main navigation sidebar |
+| `components/layout/sidebar.tsx` | Main navigation sidebar with theme/locale switchers |
 | `components/layout/report-filters.tsx` | Shared date range picker + searchable user filter |
 | `components/layout/breadcrumb.tsx` | Page breadcrumb navigation |
+| `components/layout/configuration-banner.tsx` | Banner shown when GitHub token or enterprise slug is missing |
 | `components/ui/data-table.tsx` | Sortable, paginated data table |
+| `components/ui/pdf-export.tsx` | One-click PDF generation for all dashboards |
+| `components/ui/loading-spinner.tsx` | Loading state with message |
+| `components/ui/empty-state.tsx` | Empty state when no data is available |
+| `components/auth/admin-gate.tsx` | Admin password gate for settings pages |
+| `lib/i18n/locale-provider.tsx` | Internationalization provider (en/ar/es/fr) |
+| `lib/theme/theme-provider.tsx` | Dark/light/system theme provider |
 
 ### API Layer (Next.js Route Handlers)
 
@@ -43,7 +50,9 @@ All API routes live under `app/src/app/api/` and use Zod for request validation.
 |---|---|---|
 | `/api/metrics/dashboard` | GET | Main usage metrics (active users, completions, models, languages) |
 | `/api/metrics/code-generation` | GET | LOC breakdown by feature, model, language |
-| `/api/metrics/agents` | GET | Agent adoption, acceptance, code generation |
+| `/api/metrics/agents` | GET | Agent adoption, IDE vs Coding Agent breakdown |
+| `/api/metrics/pull-requests` | GET | PR creation, merge, Copilot code review & autofix metrics |
+| `/api/metrics/cli` | GET | CLI sessions, requests, token consumption |
 | `/api/metrics/models` | GET | Model catalog with usage stats |
 | `/api/metrics/seats` | GET | Live seat data from GitHub Billing API |
 | `/api/metrics/premium-requests` | GET | Live premium request data from GitHub API |
@@ -54,10 +63,14 @@ All API routes live under `app/src/app/api/` and use Zod for request validation.
 | `/api/ingest/stream` | GET | SSE streaming ingest with progress |
 | `/api/ingest/upload` | POST | Upload JSON data manually |
 | `/api/settings` | GET/POST | Application settings CRUD |
+| `/api/settings/orgs` | GET | Discover GitHub organizations |
 | `/api/settings/sync-history` | GET | Sync history log |
 | `/api/settings/sync-interval` | GET/POST | Background sync interval config |
+| `/api/settings/sync-schedule` | GET/POST | Cron-based sync schedule |
 | `/api/auth/verify-admin` | POST | Admin password verification |
+| `/api/auth/verify-dashboard` | POST | Dashboard access verification |
 | `/api/admin/reset` | POST | Database reset |
+| `/api/audit-log` | GET | Audit log entries |
 
 ### ETL Pipeline
 
@@ -88,7 +101,11 @@ The database follows a **star schema** design optimized for analytics queries.
 
 | Table | Description |
 |---|---|
+| `dim_date` | Date dimension for calendar-based queries |
+| `dim_enterprise` | Enterprise (GitHub Enterprise Cloud) dimension |
+| `dim_org` | Organization dimension within an enterprise |
 | `dim_user` | SCD Type 2 user dimension (login, display name, team, org) |
+| `dim_ide` | IDE/editor dimension (VS Code, JetBrains, etc.) |
 | `dim_feature` | Copilot feature/mode dimension (chat, agent, code_completion, etc.) |
 | `dim_model` | AI model dimension (GPT-4, Claude, Gemini, + display name, premium flag) |
 | `dim_language` | Programming language dimension |
@@ -99,9 +116,12 @@ The database follows a **star schema** design optimized for analytics queries.
 |---|---|
 | `fact_copilot_usage_daily` | One row per user per day — core metrics (interactions, code gen, LOC, mode flags) |
 | `fact_user_feature_daily` | One row per user per feature per day |
+| `fact_user_ide_daily` | One row per user per IDE per day |
 | `fact_user_model_daily` | One row per user per model per feature per day |
 | `fact_user_language_daily` | One row per user per language per day |
 | `fact_user_language_model_daily` | One row per user per language per model per day |
+| `fact_cli_daily` | One row per user per CLI version per day (sessions, requests, tokens) |
+| `fact_org_aggregate_daily` | One row per org per day — PR metrics, Copilot code review & autofix data |
 
 ### Supporting Tables
 
@@ -109,7 +129,10 @@ The database follows a **star schema** design optimized for analytics queries.
 |---|---|
 | `raw_copilot_usage` | Raw API response stored as JSONB (for code generation report) |
 | `ingestion_log` | Sync history with timestamps and status |
-| `settings` | Key-value application settings |
+| `app_settings` | Key-value application settings |
+| `saved_views` | User-saved filter/view configurations |
+| `alert_rules` | Configurable alert thresholds |
+| `audit_log` | Admin action audit trail |
 
 ### ER Diagram
 
@@ -251,6 +274,7 @@ Application settings are stored in the `settings` database table and managed thr
 | Admin Password | Password for settings access |
 | Sync Interval | Auto-sync frequency in minutes |
 
-The Settings page has two tabs:
-1. **Configuration** — Token, org, password management
-2. **Data Sync** — Manual sync trigger, sync history, interval config
+The Settings page has three tabs:
+1. **Configuration** — Token, enterprise slug, password management
+2. **Data Sync** — Manual sync trigger, sync history, schedule config
+3. **Audit Log** — Admin action history

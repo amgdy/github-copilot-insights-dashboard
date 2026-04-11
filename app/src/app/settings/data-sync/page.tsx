@@ -20,26 +20,35 @@ import {
   Square,
   Timer,
   Info,
+  Building2,
+  X,
 } from "lucide-react";
 
 interface SyncHistoryEntry {
   id: number;
   ingestionDate: string;
   source: string;
+  scope: string | null;
+  scopeDetail: string | null;
   startedAt: string;
   completedAt: string | null;
   status: string;
   recordsFetched: number | null;
   recordsInserted: number | null;
   recordsSkipped: number | null;
+  aggregateRecords: number | null;
+  orgsDiscovered: number | null;
   errorMessage: string | null;
   apiRequests: number | null;
+  logMessages: string | null;
 }
 
 interface SettingsData {
   settings: {
     github_token: { configured: boolean };
     github_enterprise_slug: { configured: boolean };
+    sync_scope?: { configured: boolean; value: string };
+    sync_org_logins?: { configured: boolean; value: string };
   };
 }
 
@@ -78,15 +87,34 @@ function formatInterval(minutes: number): string {
 }
 
 const SOURCE_LABELS: Record<string, { label: string; color: string; icon: typeof Play }> = {
-  api: { label: "Manual (API)", color: "bg-blue-100 text-blue-700", icon: Play },
-  scheduled: { label: "Scheduled", color: "bg-purple-100 text-purple-700", icon: Clock },
-  file_upload: { label: "File Upload", color: "bg-amber-100 text-amber-700", icon: FileDown },
+  api: { label: "Manual (API)", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", icon: Play },
+  scheduled: { label: "Scheduled", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300", icon: Clock },
+  file_upload: { label: "File Upload", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", icon: FileDown },
 };
 
+const SCOPE_LABELS: Record<string, { label: string; color: string }> = {
+  enterprise: { label: "Enterprise", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" },
+  all_orgs: { label: "All Orgs", color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300" },
+  organization: { label: "Specific Orgs", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
+  file_upload: { label: "File", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+};
+
+/** Resolve scope label for combined scopes (e.g., "enterprise,all_orgs"). */
+function getScopeDisplay(scope: string | null): { label: string; color: string } {
+  const s = scope ?? "enterprise";
+  // Direct match
+  if (SCOPE_LABELS[s]) return SCOPE_LABELS[s];
+  // Combined scopes
+  const parts = s.split(",").map((p) => p.trim());
+  const labels = parts.map((p) => SCOPE_LABELS[p]?.label ?? p).join(" + ");
+  if (parts.length > 1) return { label: labels, color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" };
+  return { label: s, color: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" };
+}
+
 const STATUS_STYLES: Record<string, { color: string; icon: typeof CheckCircle }> = {
-  success: { color: "text-green-600", icon: CheckCircle },
-  error: { color: "text-red-600", icon: XCircle },
-  running: { color: "text-blue-600", icon: Loader2 },
+  success: { color: "text-green-600 dark:text-green-400", icon: CheckCircle },
+  error: { color: "text-red-600 dark:text-red-400", icon: XCircle },
+  running: { color: "text-blue-600 dark:text-blue-400", icon: Loader2 },
 };
 
 export default function DataSyncPage() {
@@ -94,7 +122,9 @@ export default function DataSyncPage() {
   const [history, setHistory] = useState<SyncHistoryEntry[]>([]);
   const [syncData, setSyncData] = useState<SyncIntervalData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ingesting, setIngesting] = useState(false);
+  const [apiSyncing, setApiSyncing] = useState(false);
+  const [fileUploading, setFileUploading] = useState(false);
+  const isBusy = apiSyncing || fileUploading;
   const [showConfirm, setShowConfirm] = useState(false);
   const [ingestLogs, setIngestLogs] = useState<string[]>([]);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -118,6 +148,18 @@ export default function DataSyncPage() {
   const [togglingScheduler, setTogglingScheduler] = useState(false);
   const [countdown, setCountdown] = useState<string>("");
 
+  // Sync scope state
+  // Sync scope state — multi-select: enterprise + org can be combined
+  const [scopeEnterprise, setScopeEnterprise] = useState(true);
+  const [scopeOrgMode, setScopeOrgMode] = useState<"none" | "all_orgs" | "organization">("none");
+  const [availableOrgs, setAvailableOrgs] = useState<Array<{ login: string; id: number }>>([]);
+  const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [savingScope, setSavingScope] = useState(false);
+  const [showOrgDropdown, setShowOrgDropdown] = useState(false);
+  const [orgSearch, setOrgSearch] = useState("");
+  const orgDropdownRef = useRef<HTMLDivElement>(null);
+
   // DB reset state
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -138,7 +180,21 @@ export default function DataSyncPage() {
         fetch("/api/settings/sync-interval"),
         fetch("/api/settings/sync-schedule"),
       ]);
-      if (settingsRes.ok) setSettings(await settingsRes.json());
+      if (settingsRes.ok) {
+        const settingsData: SettingsData = await settingsRes.json();
+        setSettings(settingsData);
+        // Initialize sync scope from settings (comma-separated combined scopes)
+        const scopeVal = settingsData.settings.sync_scope?.value ?? "enterprise";
+        const scopeParts = scopeVal.split(",").map((s: string) => s.trim());
+        setScopeEnterprise(scopeParts.includes("enterprise"));
+        if (scopeParts.includes("organization")) setScopeOrgMode("organization");
+        else if (scopeParts.includes("all_orgs")) setScopeOrgMode("all_orgs");
+        else setScopeOrgMode("none");
+        const orgLoginsVal = settingsData.settings.sync_org_logins?.value;
+        if (orgLoginsVal) {
+          setSelectedOrgs(orgLoginsVal.split(",").map((s) => s.trim()).filter(Boolean));
+        }
+      }
       if (historyRes.ok) {
         const data = await historyRes.json();
         setHistory(data.history ?? []);
@@ -333,6 +389,97 @@ export default function DataSyncPage() {
     }
   };
 
+  // Org discovery + close handler
+  const handleDiscoverOrgs = async () => {
+    setLoadingOrgs(true);
+    try {
+      const res = await fetch("/api/settings/orgs");
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableOrgs(data.orgs ?? []);
+        if (data.orgs?.length === 0) {
+          showMessage("error", "No organizations found in this enterprise");
+        }
+      } else {
+        const err = await res.json();
+        showMessage("error", err.error ?? "Failed to discover organizations");
+      }
+    } catch {
+      showMessage("error", "Network error while discovering organizations");
+    } finally {
+      setLoadingOrgs(false);
+    }
+  };
+
+  const handleToggleOrg = (login: string) => {
+    setSelectedOrgs((prev) =>
+      prev.includes(login) ? prev.filter((o) => o !== login) : [...prev, login]
+    );
+  };
+
+  const handleSaveSyncScope = async () => {
+    // Build comma-separated scope value
+    const scopeParts: string[] = [];
+    if (scopeEnterprise) scopeParts.push("enterprise");
+    if (scopeOrgMode === "all_orgs") scopeParts.push("all_orgs");
+    else if (scopeOrgMode === "organization") scopeParts.push("organization");
+
+    if (scopeParts.length === 0) {
+      showMessage("error", "Select at least one scope");
+      return;
+    }
+
+    setSavingScope(true);
+    try {
+      // Save scope setting
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "sync_scope", value: scopeParts.join(",") }),
+      });
+
+      // Save org logins — only keep them when mode is "organization", otherwise clear
+      const orgLoginsToSave = scopeOrgMode === "organization" ? selectedOrgs.join(",") : "";
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "sync_org_logins", value: orgLoginsToSave }),
+      });
+
+      // Clear local state if not in specific org mode
+      if (scopeOrgMode !== "organization") {
+        setSelectedOrgs([]);
+      }
+
+      const labels: string[] = [];
+      if (scopeEnterprise) labels.push("Enterprise");
+      if (scopeOrgMode === "all_orgs") labels.push("All Organizations");
+      else if (scopeOrgMode === "organization") labels.push(`${selectedOrgs.length} Organization(s)`);
+      showMessage("success", `Sync scope saved: ${labels.join(" + ")}`);
+      await fetchData();
+    } catch {
+      showMessage("error", "Failed to save sync scope");
+    } finally {
+      setSavingScope(false);
+    }
+  };
+
+  // Close org dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (orgDropdownRef.current && !orgDropdownRef.current.contains(e.target as Node)) {
+        setShowOrgDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filteredOrgs = availableOrgs.filter((o) => {
+    if (!orgSearch) return true;
+    return o.login.toLowerCase().includes(orgSearch.toLowerCase());
+  });
+
   const handleReset = async () => {
     setShowResetConfirm(false);
     setResetting(true);
@@ -357,7 +504,6 @@ export default function DataSyncPage() {
     const reader = res.body?.getReader();
     if (!reader) {
       showMessage("error", "Unable to read stream");
-      setIngesting(false);
       return;
     }
 
@@ -405,7 +551,7 @@ export default function DataSyncPage() {
 
   const handleIngest = async () => {
     setShowConfirm(false);
-    setIngesting(true);
+    setApiSyncing(true);
     setIngestLogs([]);
 
     try {
@@ -413,7 +559,7 @@ export default function DataSyncPage() {
       if (!res.ok) {
         const err = await res.json();
         showMessage("error", err.error ?? "Ingestion failed");
-        setIngesting(false);
+        setApiSyncing(false);
         return;
       }
       await readSSEStream(res);
@@ -421,14 +567,14 @@ export default function DataSyncPage() {
       showMessage("error", "Network error during ingestion");
       setIngestLogs((prev) => [...prev, "✗ Network error"]);
     } finally {
-      setIngesting(false);
+      setApiSyncing(false);
       fetchData(); // refresh history
     }
   };
 
   const handleFileUpload = async () => {
     if (!selectedFile) return;
-    setIngesting(true);
+    setFileUploading(true);
     setIngestLogs([]);
 
     try {
@@ -448,7 +594,7 @@ export default function DataSyncPage() {
         } else {
           showMessage("error", "File upload failed");
         }
-        setIngesting(false);
+        setFileUploading(false);
         return;
       }
 
@@ -459,7 +605,7 @@ export default function DataSyncPage() {
       showMessage("error", "Network error during file upload");
       setIngestLogs((prev) => [...prev, "✗ Network error"]);
     } finally {
-      setIngesting(false);
+      setFileUploading(false);
       fetchData(); // refresh history
     }
   };
@@ -499,8 +645,8 @@ export default function DataSyncPage() {
         <div
           className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
             message.type === "success"
-              ? "border-green-200 bg-green-50 text-green-800"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+              : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300"
           }`}
         >
           {message.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
@@ -509,11 +655,11 @@ export default function DataSyncPage() {
       )}
 
       {/* About Data Sync */}
-      <div className="flex gap-3 rounded-lg border border-blue-100 bg-linear-to-r from-blue-50 to-indigo-50 p-4">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
+      <div className="flex gap-3 rounded-lg border border-blue-100 bg-linear-to-r from-blue-50 to-indigo-50 p-4 dark:border-blue-800 dark:from-blue-900/30 dark:to-indigo-900/30">
+        <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500 dark:text-blue-400" />
         <div>
-          <p className="text-sm font-medium text-blue-900">How data sync works</p>
-          <p className="mt-1 text-xs leading-relaxed text-blue-700">
+          <p className="text-sm font-medium text-blue-900 dark:text-blue-200">How data sync works</p>
+          <p className="mt-1 text-xs leading-relaxed text-blue-700 dark:text-blue-400">
             The GitHub Copilot Metrics API refreshes data approximately once every 24 hours (end of UTC day).
             You can schedule automatic syncs, trigger a one-time pull, or upload an NDJSON metrics export.
             Duplicate records are automatically detected and skipped.
@@ -521,13 +667,208 @@ export default function DataSyncPage() {
         </div>
       </div>
 
+      {/* Sync Scope */}
+      <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-indigo-600" />
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sync Scope</h2>
+        </div>
+        <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+          Choose the data source scope for syncing Copilot usage metrics.
+        </p>
+
+        {/* Scope checkboxes — can combine enterprise + org */}
+        <div className="mb-4 space-y-3">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700/50 dark:hover:bg-gray-700">
+            <input
+              type="checkbox"
+              checked={scopeEnterprise}
+              onChange={(e) => setScopeEnterprise(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Enterprise Metrics</span>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Fetch user-level metrics from the enterprise-wide endpoint. Fastest option, but may not include all org-level data.</p>
+            </div>
+          </label>
+
+          <div className="rounded-md border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700/50">
+            <label className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700">
+              <input
+                type="checkbox"
+                checked={scopeOrgMode !== "none"}
+                onChange={(e) => setScopeOrgMode(e.target.checked ? "all_orgs" : "none")}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Organization Metrics</span>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Fetch per-org user data + aggregate data (includes PR metrics). Can be combined with Enterprise.</p>
+              </div>
+            </label>
+
+            {/* Org sub-options — shown when org checkbox is checked */}
+            {scopeOrgMode !== "none" && (
+              <div className="border-t border-gray-200 px-3 pb-3 pt-2 dark:border-gray-600">
+                <div className="ml-6 space-y-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="orgMode"
+                      value="all_orgs"
+                      checked={scopeOrgMode === "all_orgs"}
+                      onChange={() => setScopeOrgMode("all_orgs")}
+                      className="h-3.5 w-3.5 border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-500"
+                    />
+                    <div>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">All Organizations</span>
+                      <span className="ml-1.5 text-xs text-gray-400 dark:text-gray-500">(auto-discover)</span>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="orgMode"
+                      value="organization"
+                      checked={scopeOrgMode === "organization"}
+                      onChange={() => setScopeOrgMode("organization")}
+                      className="h-3.5 w-3.5 border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-500"
+                    />
+                    <div>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Specific Organizations</span>
+                      <span className="ml-1.5 text-xs text-gray-400 dark:text-gray-500">(select below)</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Organization selector — shown when org mode is active */}
+        {scopeOrgMode !== "none" && (
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDiscoverOrgs}
+                disabled={loadingOrgs || !isConfigured || !hasSlug}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+              >
+                {loadingOrgs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Discover Organizations
+              </button>
+              {availableOrgs.length > 0 && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">{availableOrgs.length} found</span>
+              )}
+            </div>
+
+            {/* Org multi-select dropdown */}
+            {availableOrgs.length > 0 && (
+              <div ref={orgDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowOrgDropdown(!showOrgDropdown)}
+                  className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 shadow-xs hover:bg-gray-50 focus:border-blue-500 focus:outline-hidden"
+                >
+                  <span className="text-gray-700 dark:text-gray-300">
+                    {selectedOrgs.length === 0
+                      ? "Select organizations…"
+                      : `${selectedOrgs.length} organization${selectedOrgs.length !== 1 ? "s" : ""} selected`}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                </button>
+                {showOrgDropdown && (
+                  <div className="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 shadow-lg">
+                    <div className="border-b border-gray-100 p-2 dark:border-gray-700">
+                      <input
+                        type="text"
+                        placeholder="Search organizations…"
+                        value={orgSearch}
+                        onChange={(e) => setOrgSearch(e.target.value)}
+                        className="w-full rounded-sm border border-gray-200 px-2.5 py-1.5 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-hidden dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:placeholder:text-gray-500"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="border-b border-gray-100 px-3 py-1.5 dark:border-gray-700">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedOrgs.length === filteredOrgs.length) {
+                            setSelectedOrgs([]);
+                          } else {
+                            setSelectedOrgs(filteredOrgs.map((o) => o.login));
+                          }
+                        }}
+                        className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                      >
+                        {selectedOrgs.length === filteredOrgs.length ? "Deselect all" : "Select all"}
+                      </button>
+                    </div>
+                    <ul className="max-h-48 overflow-y-auto py-1">
+                      {filteredOrgs.map((org) => (
+                        <li key={org.login}>
+                          <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={selectedOrgs.includes(org.login)}
+                              onChange={() => handleToggleOrg(org.login)}
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">{org.login}</span>
+                          </label>
+                        </li>
+                      ))}
+                      {filteredOrgs.length === 0 && (
+                        <li className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No organizations match</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Selected org chips — only in specific org mode */}
+            {scopeOrgMode === "organization" && selectedOrgs.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedOrgs.map((org) => (
+                  <span
+                    key={org}
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                  >
+                    {org}
+                    <button
+                      onClick={() => handleToggleOrg(org)}
+                      className="ml-0.5 rounded-full p-0.5 hover:bg-blue-200 dark:hover:bg-blue-800"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {!isConfigured && (
+              <p className="text-xs text-amber-600">Configure a GitHub token first to discover organizations.</p>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={handleSaveSyncScope}
+          disabled={savingScope || (!scopeEnterprise && scopeOrgMode === "none") || (scopeOrgMode === "organization" && selectedOrgs.length === 0)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {savingScope ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save Scope
+        </button>
+      </div>
+
       {/* GitHub API Sync */}
-      <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
         {/* Countdown bar — only when scheduler running */}
         {schedulerStatus?.enabled && schedulerStatus.nextRunAt && (
-          <div className="rounded-t-lg border-b border-blue-100 bg-blue-50 px-5 py-2">
+          <div className="rounded-t-lg border-b border-blue-100 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30 px-5 py-2">
             <div className="flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5 text-blue-700">
+              <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
                 <Timer className="h-3.5 w-3.5" />
                 <span className="font-medium">Next sync in:</span>
                 <span className="tabular-nums font-semibold">{countdown || "—"}</span>
@@ -546,35 +887,35 @@ export default function DataSyncPage() {
 
         <div className="p-5">
           <div className="mb-1 flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-gray-900">GitHub API Sync</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">GitHub API Sync</h2>
             {schedulerStatus?.enabled && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                 Scheduled
               </span>
             )}
           </div>
-          <p className="mb-4 text-xs text-gray-500">
+          <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
             Pull usage metrics from the GitHub Copilot API — once now, or on a recurring schedule.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Sync Now */}
-            <div className="rounded-md border border-gray-200 p-4">
+            <div className="rounded-md border border-gray-200 p-4 dark:border-gray-600">
               <div className="mb-2 flex items-center gap-2">
-                <Play className="h-4 w-4 text-green-600" />
-                <h3 className="text-sm font-medium text-gray-900">Sync Now</h3>
+                <Play className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Sync Now</h3>
               </div>
-              <p className="mb-3 text-xs text-gray-500">
+              <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
                 One-time pull of the latest metrics from the GitHub API.
               </p>
               <button
                 onClick={() => setShowConfirm(true)}
-                disabled={ingesting || !isConfigured || !hasSlug}
+                disabled={isBusy || !isConfigured || !hasSlug}
                 className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {ingesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {ingesting ? "Syncing…" : "Pull from API"}
+                {apiSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                {apiSyncing ? "Syncing…" : "Pull from API"}
               </button>
               {!isConfigured && (
                 <p className="mt-2 text-xs text-amber-600">
@@ -589,18 +930,18 @@ export default function DataSyncPage() {
             </div>
 
             {/* Scheduled Sync */}
-            <div className="rounded-md border border-gray-200 p-4">
+            <div className="rounded-md border border-gray-200 p-4 dark:border-gray-600">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-purple-600" />
-                  <h3 className="text-sm font-medium text-gray-900">Scheduled Sync</h3>
+                  <Clock className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Scheduled Sync</h3>
                 </div>
                 <button
                   onClick={handleToggleScheduler}
                   disabled={togglingScheduler}
                   className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     schedulerStatus?.enabled
-                      ? "border border-red-300 bg-white text-red-600 hover:bg-red-50"
+                      ? "border border-red-300 bg-white text-red-600 hover:bg-red-50 dark:border-red-700 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-900/30"
                       : "bg-green-600 text-white hover:bg-green-700"
                   }`}
                 >
@@ -614,7 +955,7 @@ export default function DataSyncPage() {
                   {schedulerStatus?.enabled ? "Stop" : "Start"}
                 </button>
               </div>
-              <p className="mb-3 text-xs text-gray-500">
+              <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
                 Automatically pull fresh data at a recurring interval.
               </p>
               <div className="flex items-start gap-2">
@@ -622,35 +963,35 @@ export default function DataSyncPage() {
                   <button
                     type="button"
                     onClick={() => setShowDropdown(!showDropdown)}
-                    className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-xs hover:bg-gray-50 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                    className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 shadow-xs hover:bg-gray-50 dark:hover:bg-gray-600 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                   >
-                    <span className="text-gray-900">
+                    <span className="text-gray-900 dark:text-gray-100">
                       {isCustomInterval ? `Custom (${formatInterval(effectiveMinutes)})` : currentDisplayLabel}
                     </span>
                     <ChevronDown className="h-4 w-4 text-gray-400" />
                   </button>
                   {showDropdown && (
-                    <div className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                    <div className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 py-1 shadow-lg">
                       {PRESET_OPTIONS.map((opt) => (
                         <button
                           key={opt.minutes}
                           onClick={() => handleSelectPreset(opt.minutes)}
                           className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${
                             !isCustomInterval && selectedMinutes === opt.minutes
-                              ? "bg-blue-50 text-blue-700 font-medium"
-                              : "text-gray-700 hover:bg-gray-50"
+                              ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-900/30 dark:text-blue-300"
+                              : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
                           }`}
                         >
                           {opt.label}
                         </button>
                       ))}
-                      <div className="my-1 border-t border-gray-100" />
+                      <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
                       <button
                         onClick={handleSelectCustom}
                         className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${
                           isCustomInterval
-                            ? "bg-blue-50 text-blue-700 font-medium"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-900/30 dark:text-blue-300"
+                            : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
                         }`}
                       >
                         Custom...
@@ -676,9 +1017,9 @@ export default function DataSyncPage() {
                       max={24}
                       value={customHours}
                       onChange={(e) => setCustomHours(Math.max(0, Math.min(24, parseInt(e.target.value) || 0)))}
-                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                     />
-                    <span className="text-xs text-gray-500">h</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">h</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <input
@@ -687,9 +1028,9 @@ export default function DataSyncPage() {
                       max={59}
                       value={customMinutesInput}
                       onChange={(e) => setCustomMinutesInput(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                     />
-                    <span className="text-xs text-gray-500">m</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">m</span>
                   </div>
                 </div>
               )}
@@ -704,21 +1045,23 @@ export default function DataSyncPage() {
       </div>
 
       {/* File Upload */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
+      <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 p-5">
         <div className="mb-1 flex items-center gap-2">
           <Upload className="h-4 w-4 text-amber-600" />
-          <h2 className="text-sm font-semibold text-gray-900">File Upload</h2>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">File Upload</h2>
         </div>
-        <p className="mb-3 text-xs text-gray-500">
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
           Upload an NDJSON file exported from the GitHub Copilot usage metrics report.
+          Supports both enterprise-level and organization-level exports. Organization data from the file
+          will be automatically detected from the <code className="rounded-sm bg-gray-100 px-1 dark:bg-gray-700">organization_id</code> field.
         </p>
         <div
           className={`relative rounded-md border-2 border-dashed p-6 text-center transition-colors ${
             dragOver
-              ? "border-blue-400 bg-blue-50"
+              ? "border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-900/30"
               : selectedFile
-                ? "border-green-300 bg-green-50"
-                : "border-gray-300 hover:border-gray-400"
+                ? "border-green-300 bg-green-50 dark:border-green-600 dark:bg-green-900/30"
+                : "border-gray-300 hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500"
           }`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -744,28 +1087,28 @@ export default function DataSyncPage() {
           />
           <Upload className="mx-auto h-8 w-8 text-gray-400" />
           {selectedFile ? (
-            <p className="mt-2 text-sm font-medium text-green-700">
+            <p className="mt-2 text-sm font-medium text-green-700 dark:text-green-400">
               {selectedFile.name}{" "}
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
                 ({(selectedFile.size / 1024).toFixed(1)} KB)
               </span>
             </p>
           ) : (
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
               Drag &amp; drop an NDJSON file or click to browse
             </p>
           )}
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
             Supports .json, .ndjson, .jsonl files
           </p>
         </div>
         <button
           onClick={handleFileUpload}
-          disabled={ingesting || !selectedFile}
+          disabled={isBusy || !selectedFile}
           className="mt-3 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {ingesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {ingesting ? "Uploading…" : "Upload & Ingest"}
+          {fileUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {fileUploading ? "Uploading…" : "Upload & Ingest"}
         </button>
       </div>
 
@@ -774,8 +1117,8 @@ export default function DataSyncPage() {
         <div className="rounded-md border border-gray-300 bg-gray-900">
           <div className="flex items-center gap-2 border-b border-gray-700 px-3 py-2">
             <Terminal className="h-3.5 w-3.5 text-gray-400" />
-            <span className="text-xs font-medium text-gray-400">Ingestion Log</span>
-            {ingesting && <Loader2 className="ml-auto h-3 w-3 animate-spin text-green-400" />}
+            <span className="text-xs font-medium text-gray-400 dark:text-gray-500">Ingestion Log</span>
+            {isBusy && <Loader2 className="ml-auto h-3 w-3 animate-spin text-green-400" />}
           </div>
           <div className="max-h-64 overflow-y-auto p-3 font-mono text-xs leading-5">
             {ingestLogs.map((line, i) => (
@@ -800,16 +1143,16 @@ export default function DataSyncPage() {
       {/* Confirmation Dialog */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-gray-900">Start data ingestion?</h3>
-            <p className="mt-2 text-sm text-gray-600">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Start data ingestion?</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               This will fetch Copilot usage data from the GitHub API and load it into the database.
               This may take a few minutes depending on data volume.
             </p>
             <div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>
@@ -832,11 +1175,11 @@ export default function DataSyncPage() {
         const pageEntries = history.slice(pageStart, pageStart + HISTORY_PAGE_SIZE);
 
         return (
-          <div className="rounded-lg border border-gray-200 bg-white">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+          <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-700">
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">Sync History</h2>
-                <p className="text-xs text-gray-500">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sync History</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   {history.length === 0
                     ? "No runs recorded yet"
                     : `${history.length} run${history.length !== 1 ? "s" : ""} recorded`}
@@ -848,8 +1191,8 @@ export default function DataSyncPage() {
                   title={autoRefreshHistory ? "Pause auto-refresh" : "Resume auto-refresh"}
                   className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                     autoRefreshHistory
-                      ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                      : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"
+                      ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-700 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
+                      : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
                   }`}
                 >
                   <RefreshCw className={`h-3 w-3 ${autoRefreshHistory ? "animate-spin" : ""}`} />
@@ -858,7 +1201,7 @@ export default function DataSyncPage() {
                 <button
                   onClick={() => fetchData()}
                   title="Refresh now"
-                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
                 >
                   <RefreshCw className="h-3 w-3" />
                 </button>
@@ -867,26 +1210,27 @@ export default function DataSyncPage() {
 
             {history.length === 0 ? (
               <div className="px-5 py-10 text-center">
-                <Clock className="mx-auto h-8 w-8 text-gray-300" />
-                <p className="mt-2 text-sm text-gray-500">No sync history yet</p>
-                <p className="text-xs text-gray-400">Run your first ingestion above to get started</p>
+                <Clock className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" />
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No sync history yet</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Run your first ingestion above to get started</p>
               </div>
             ) : (
               <>
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-gray-100 dark:divide-gray-700">
                   {/* Header */}
-                  <div className="grid grid-cols-12 gap-2 px-5 py-2 text-xs font-medium uppercase tracking-wider text-gray-500">
-                    <div className="col-span-3">Date</div>
+                  <div className="grid grid-cols-12 gap-2 px-5 py-2 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="col-span-2">Date</div>
                     <div className="col-span-2">Source</div>
+                    <div className="col-span-2">Scope</div>
                     <div className="col-span-1">Status</div>
                     <div className="col-span-2 text-right">Records</div>
-                    <div className="col-span-1 text-right">Skipped</div>
                     <div className="col-span-1 text-right">Duration</div>
                     <div className="col-span-2 text-right">API Calls</div>
                   </div>
 
                   {pageEntries.map((entry) => {
                     const source = SOURCE_LABELS[entry.source] ?? SOURCE_LABELS.api;
+                    const scopeStyle = getScopeDisplay(entry.scope);
                     const statusStyle = STATUS_STYLES[entry.status] ?? STATUS_STYLES.running;
                     const StatusIcon = statusStyle.icon;
                     const isExpanded = expandedRow === entry.id;
@@ -894,10 +1238,10 @@ export default function DataSyncPage() {
                     return (
                       <div key={entry.id}>
                         <button
-                          className="grid w-full grid-cols-12 gap-2 px-5 py-3 text-left text-sm hover:bg-gray-50 transition-colors"
+                          className="grid w-full grid-cols-12 gap-2 px-5 py-3 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                           onClick={() => setExpandedRow(isExpanded ? null : entry.id)}
                         >
-                          <div className="col-span-3 text-gray-900">
+                          <div className="col-span-2 text-gray-900 dark:text-gray-100 text-xs">
                             {fmtDate(entry.startedAt)}
                           </div>
                           <div className="col-span-2">
@@ -905,84 +1249,136 @@ export default function DataSyncPage() {
                               {source.label}
                             </span>
                           </div>
+                          <div className="col-span-2">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${scopeStyle.color}`}>
+                              {scopeStyle.label}
+                            </span>
+                          </div>
                           <div className="col-span-1">
                             <StatusIcon
                               className={`h-4 w-4 ${statusStyle.color} ${entry.status === "running" ? "animate-spin" : ""}`}
                             />
                           </div>
-                          <div className="col-span-2 text-right text-gray-700">
+                          <div className="col-span-2 text-right text-gray-700 dark:text-gray-300 text-xs">
                             {entry.recordsInserted != null ? (
                               <span>
                                 {entry.recordsFetched?.toLocaleString()} → {entry.recordsInserted.toLocaleString()}
+                                {entry.recordsSkipped ? <span className="text-gray-400 dark:text-gray-500"> ({entry.recordsSkipped} dup)</span> : ""}
                               </span>
                             ) : (
                               "—"
                             )}
                           </div>
-                          <div className="col-span-1 text-right text-gray-500">
-                            {entry.recordsSkipped ? entry.recordsSkipped.toLocaleString() : "—"}
-                          </div>
-                          <div className="col-span-1 text-right text-gray-600">
+                          <div className="col-span-1 text-right text-gray-600 dark:text-gray-400 text-xs">
                             {fmtDuration(entry.startedAt, entry.completedAt)}
                           </div>
-                          <div className="col-span-2 text-right text-gray-600">
+                          <div className="col-span-2 text-right text-gray-600 dark:text-gray-400 text-xs">
                             {entry.apiRequests ?? "—"}
                           </div>
                         </button>
 
                         {/* Expanded detail */}
                         {isExpanded && (
-                          <div className="border-t border-gray-100 bg-gray-50 px-5 py-3">
-                            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                          <div className="border-t border-gray-100 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-900/50">
+                            {/* Summary grid */}
+                            <dl className="grid grid-cols-3 gap-x-6 gap-y-3 text-xs">
                               <div>
-                                <dt className="font-medium text-gray-500">Started At</dt>
-                                <dd className="text-gray-900">{new Date(entry.startedAt).toLocaleString()}</dd>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Scope</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{scopeStyle.label}</dd>
                               </div>
                               <div>
-                                <dt className="font-medium text-gray-500">Completed At</dt>
-                                <dd className="text-gray-900">
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Scope Detail</dt>
+                                <dd className="text-gray-900 dark:text-gray-100 break-all">{entry.scopeDetail ?? "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Source</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{source.label}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Started At</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{new Date(entry.startedAt).toLocaleString()}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Completed At</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">
                                   {entry.completedAt ? new Date(entry.completedAt).toLocaleString() : "In progress…"}
                                 </dd>
                               </div>
                               <div>
-                                <dt className="font-medium text-gray-500">Records Fetched</dt>
-                                <dd className="text-gray-900">{entry.recordsFetched?.toLocaleString() ?? "—"}</dd>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Duration</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{fmtDuration(entry.startedAt, entry.completedAt)}</dd>
                               </div>
                               <div>
-                                <dt className="font-medium text-gray-500">Records Inserted</dt>
-                                <dd className="text-gray-900">{entry.recordsInserted?.toLocaleString() ?? "—"}</dd>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Records Fetched</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{entry.recordsFetched?.toLocaleString() ?? "—"}</dd>
                               </div>
                               <div>
-                                <dt className="font-medium text-gray-500">Duplicates Skipped</dt>
-                                <dd className="text-gray-900">{entry.recordsSkipped?.toLocaleString() ?? "—"}</dd>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Records Inserted</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{entry.recordsInserted?.toLocaleString() ?? "—"}</dd>
                               </div>
                               <div>
-                                <dt className="font-medium text-gray-500">Source</dt>
-                                <dd className="text-gray-900">{source.label}</dd>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Duplicates Skipped</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{entry.recordsSkipped?.toLocaleString() ?? "—"}</dd>
                               </div>
                               <div>
-                                <dt className="font-medium text-gray-500">API Requests</dt>
-                                <dd className="text-gray-900">{entry.apiRequests ?? "N/A"}</dd>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Aggregate Records</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{entry.aggregateRecords?.toLocaleString() ?? "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Organizations</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{entry.orgsDiscovered ?? "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">API Requests</dt>
+                                <dd className="text-gray-900 dark:text-gray-100">{entry.apiRequests ?? "N/A"}</dd>
                               </div>
                               {entry.errorMessage && (
-                                <div className="col-span-2">
-                                  <dt className="font-medium text-red-600">Error</dt>
-                                  <dd className="mt-1 rounded-md bg-red-50 p-2 text-red-700 font-mono text-xs whitespace-pre-wrap">
+                                <div className="col-span-3">
+                                  <dt className="font-medium text-red-600 dark:text-red-400">Error</dt>
+                                  <dd className="mt-1 rounded-md bg-red-50 p-2 text-red-700 font-mono text-xs whitespace-pre-wrap dark:bg-red-900/30 dark:text-red-300">
                                     {entry.errorMessage}
                                   </dd>
                                 </div>
                               )}
                             </dl>
-                            <div className="mt-3 flex justify-end">
-                              <a
-                                href={`/api/settings/sync-history/${entry.id}/log`}
-                                download
-                                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50 transition-colors"
-                              >
-                                <FileDown className="h-3.5 w-3.5" />
-                                Download Log
-                              </a>
-                            </div>
+
+                            {/* Inline log viewer */}
+                            {entry.logMessages && (
+                              <div className="mt-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Terminal className="h-3.5 w-3.5 text-gray-500" />
+                                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Ingestion Log</span>
+                                  </div>
+                                  <a
+                                    href={`/api/settings/sync-history/${entry.id}/log`}
+                                    download
+                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                                  >
+                                    <FileDown className="h-3 w-3" />
+                                    Download
+                                  </a>
+                                </div>
+                                <div className="rounded-md border border-gray-300 bg-gray-900 max-h-64 overflow-y-auto">
+                                  <pre className="p-3 font-mono text-xs leading-5 text-gray-300 whitespace-pre-wrap">
+                                    {entry.logMessages}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
+
+                            {!entry.logMessages && (
+                              <div className="mt-3 flex justify-end">
+                                <a
+                                  href={`/api/settings/sync-history/${entry.id}/log`}
+                                  download
+                                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50 transition-colors dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                                >
+                                  <FileDown className="h-3.5 w-3.5" />
+                                  Download Log
+                                </a>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -992,25 +1388,25 @@ export default function DataSyncPage() {
 
                 {/* Pagination footer */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-gray-100 px-5 py-2.5">
-                    <p className="text-xs text-gray-500">
+                  <div className="flex items-center justify-between border-t border-gray-100 px-5 py-2.5 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       Showing {pageStart + 1}–{Math.min(pageStart + HISTORY_PAGE_SIZE, history.length)} of {history.length}
                     </p>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setHistoryPage((p) => Math.max(0, p - 1))}
                         disabled={safePage === 0}
-                        className="inline-flex items-center rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex items-center rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
                       >
                         <ChevronLeft className="h-3.5 w-3.5" />
                       </button>
-                      <span className="px-2 text-xs tabular-nums text-gray-700">
+                      <span className="px-2 text-xs tabular-nums text-gray-700 dark:text-gray-300">
                         {safePage + 1} / {totalPages}
                       </span>
                       <button
                         onClick={() => setHistoryPage((p) => Math.min(totalPages - 1, p + 1))}
                         disabled={safePage >= totalPages - 1}
-                        className="inline-flex items-center rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex items-center rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
                       >
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
@@ -1024,15 +1420,15 @@ export default function DataSyncPage() {
       })()}
 
       {/* Database Management */}
-      <div className="rounded-lg border border-red-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-gray-900">Database Management</h2>
-        <p className="mt-1 mb-4 text-xs text-gray-500">
+      <div className="rounded-lg border border-red-200 bg-white p-5 dark:border-red-800 dark:bg-gray-800">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Database Management</h2>
+        <p className="mt-1 mb-4 text-xs text-gray-500 dark:text-gray-400">
           Reset the database to clear all ingested data. Configuration settings (token, slug) will be preserved.
         </p>
         <button
           onClick={() => setShowResetConfirm(true)}
           disabled={resetting}
-          className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 shadow-xs hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 shadow-xs hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-900/30"
         >
           {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseZap className="h-4 w-4" />}
           {resetting ? "Resetting…" : "Reset Database"}
@@ -1042,16 +1438,16 @@ export default function DataSyncPage() {
       {/* Reset Confirmation Dialog */}
       {showResetConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-red-600">Reset database?</h3>
-            <p className="mt-2 text-sm text-gray-600">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+            <h3 className="text-base font-semibold text-red-600 dark:text-red-400">Reset database?</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               This will permanently delete all ingested Copilot usage data. Your settings
               (token, enterprise slug) will be preserved. This action cannot be undone.
             </p>
             <div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setShowResetConfirm(false)}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>
