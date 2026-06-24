@@ -712,19 +712,18 @@ async function fetchOrgData(opts: OrgFetchOptions): Promise<{
     const aggReportData: CopilotMetricsReportResponse = await aggResponse.json();
 
     if (aggReportData.download_links?.length) {
+      const lines: AggregateReportLine[] = [];
       for (const link of aggReportData.download_links) {
         const fileResponse = await fetch(link);
         apiRequestCount++;
         if (fileResponse.ok) {
           const content = await fileResponse.text();
-          const parsed = parseNdjson<CopilotAggregateRecord>(content);
-          for (const r of parsed) {
-            r._orgLogin = opts.orgLogin;
-            r._scope = "organization";
-          }
-          aggregateRecords.push(...parsed);
+          lines.push(...parseNdjson<AggregateReportLine>(content));
         }
       }
+      aggregateRecords.push(
+        ...flattenAggregateReport(lines, "organization", opts.orgLogin)
+      );
     }
   } catch (err) {
     console.warn(`Failed to fetch aggregate data for org "${opts.orgLogin}": ${err}`);
