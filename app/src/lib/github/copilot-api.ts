@@ -716,10 +716,14 @@ async function fetchOrgData(opts: OrgFetchOptions): Promise<{
       for (const link of aggReportData.download_links) {
         const fileResponse = await fetch(link);
         apiRequestCount++;
-        if (fileResponse.ok) {
-          const content = await fileResponse.text();
-          lines.push(...parseNdjson<AggregateReportLine>(content));
+        if (!fileResponse.ok) {
+          console.warn(
+            `Failed to download org aggregate file for "${opts.orgLogin}": ${fileResponse.status} ${fileResponse.statusText}`
+          );
+          continue;
         }
+        const content = await fileResponse.text();
+        lines.push(...parseNdjson<AggregateReportLine>(content));
       }
       aggregateRecords.push(
         ...flattenAggregateReport(lines, "organization", opts.orgLogin)
